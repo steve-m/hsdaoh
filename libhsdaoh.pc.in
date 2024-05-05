@@ -1,0 +1,11 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: hsdaoh Library
+Description: C Utility Library
+Version: @VERSION@
+Cflags: -I${includedir}/
+Libs: -L${libdir} -lhsdaoh
+Libs.private:  -lusb-1.0 @HSDAOH_PC_LIBS@
