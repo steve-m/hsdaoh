@@ -86,6 +86,7 @@ struct hsdaoh_dev {
 	int discard_start_frames;
 	uint16_t last_frame_cnt;
 	uint16_t idle_cnt;
+	bool stream_synced;
 
 	unsigned int width, height, fps;
 
@@ -590,13 +591,15 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	if (meta.framecounter == dev->last_frame_cnt)
 		return;
 
-	// FIXME: calculate number of dropped frames
-	if (meta.framecounter != ((dev->last_frame_cnt + 1) & 0xffff))
-		printf("Missed at least one frame, fcnt %d, expected %d!\n", meta.framecounter, ((dev->last_frame_cnt + 1) & 0xffff));
+	if (dev->stream_synced) {
+		if (meta.framecounter != ((dev->last_frame_cnt + 1) & 0xffff))
+			printf("Missed at least one frame, fcnt %d, expected %d!\n",
+			       meta.framecounter, ((dev->last_frame_cnt + 1) & 0xffff));
+	}
 
 	dev->last_frame_cnt = meta.framecounter;
 
-	int frame_error = 0;
+	int frame_errors = 0;
 
 	for (unsigned int i = 0; i < dev->height; i++) {
 		uint8_t *line_dat = data + (dev->width * 2 * i);
@@ -615,10 +618,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		}
 
 		uint16_t idle_len = (dev->width-1) - payload_len;
-		int r = hsdaoh_check_idle_cnt(dev, (uint16_t *)line_dat + payload_len, idle_len);
-
-		if (r)
-			printf("%d idle counter errors in line %d\n", r, i);
+		frame_errors += hsdaoh_check_idle_cnt(dev, (uint16_t *)line_dat + payload_len, idle_len);
 
 		if (payload_len > 0)
 			memmove(data + frame_payload_bytes, line_dat, payload_len * sizeof(uint16_t));
@@ -629,11 +629,16 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	if (dev->cb)
 		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
 
-	if (frame_error) {
-		fprintf(stderr,"%d counter errors, %d frames since last error\n", frame_error, dev->frames_since_error);
+	if (frame_errors && dev->stream_synced) {
+		fprintf(stderr,"%d idle counter errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
 		dev->frames_since_error = 0;
 	} else
 		dev->frames_since_error++;
+
+	if (!dev->stream_synced) {
+		fprintf(stderr, "Syncronized to HDMI input stream\n");
+		dev->stream_synced = true;
+	}
 }
 
 void _uvc_callback(uvc_frame_t *frame, void *ptr)
@@ -717,11 +722,9 @@ int hsdaoh_stop_stream(hsdaoh_dev_t *dev)
 		dev->async_status = HSDAOH_CANCELING;
 		dev->async_cancel = 1;
 
-
-
 		/* End the stream. Blocks until last callback is serviced */
-	//	uvc_stop_streaming(dev->uvc_devh);
-	//	puts("Done streaming.");
+		uvc_stop_streaming(dev->uvc_devh);
+		puts("Done streaming.");
 
 		return 0;
 	}

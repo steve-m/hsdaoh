@@ -158,6 +158,8 @@ static int ppm_report(uint64_t nsamples, uint64_t interval)
 	return (int)round(ppm);
 }
 
+unsigned int counter_errors = -1;
+
 static void ppm_test(uint32_t len)
 {
 	static uint64_t nsamples = 0;
@@ -208,6 +210,12 @@ static void ppm_test(uint32_t len)
 		ppm_report(nsamples_total, interval_total));
 	ppm_recent = ppm_now;
 	nsamples = 0;
+
+	if (counter_errors) {
+		printf("Encountered %d counter errors\n", counter_errors);
+		counter_errors  = 0;
+	}
+
 }
 
 uint16_t last_value = 0;
@@ -219,9 +227,8 @@ static void hsdaoh_callback(unsigned char *buf, uint32_t len, void *ctx)
 	int n = len / sizeof(uint16_t);
 
 	for (int i = 0; i < n; i++) {
-		if (cnt[i] != ((last_value+1) & 0xffff) ) {
-			printf("Counter error: %02x != %02x\n", cnt[i], ((last_value+1) & 0xffff));
-		}
+		if (cnt[i] != ((last_value+1) & 0xffff))
+			counter_errors++;
 
 		last_value = cnt[i];
 	}
