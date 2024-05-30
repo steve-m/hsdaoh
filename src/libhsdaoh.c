@@ -90,6 +90,10 @@ struct hsdaoh_dev {
 
 	unsigned int width, height, fps;
 
+	/* for IQ DC offset removal */
+	float avg_real;
+	float avg_img;
+
 	/* status */
 	int dev_lost;
 	int driver_active;
@@ -549,6 +553,95 @@ int hsdaoh_close(hsdaoh_dev_t *dev)
 	return 0;
 }
 
+/* IQ DC offset removal in the style of GNURadio, although with constant
+ * tracking by using only 1/128 of the samples */
+void hsdaoh_remove_dc_offset(hsdaoh_dev_t *dev, float *in, size_t length)
+{
+	unsigned int i;
+	float ratio = 1e-05f;
+	float avg_real = dev->avg_real;
+	float avg_img = dev->avg_img;
+
+	// do some sync for tracking
+	for (i = 0; i < length/128; i+=2) {
+		avg_real = ratio * (in[i] - avg_real) + avg_real;
+		avg_img = ratio * (in[i+1] - avg_img) + avg_img;
+	}
+
+	dev->avg_real = avg_real;
+	dev->avg_img = avg_img;
+
+	for (i = 0; i < length; i+=2) {
+		in[i] -= avg_real;
+		in[i+1] -= avg_img;
+	}
+}
+
+int hsdaoh_handle_payload_10bit(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
+{
+	unsigned int i, j = 0;
+	uint16_t *samps = malloc(sizeof(uint16_t) * dev->width * dev->height * 2);
+	float *floats = malloc(sizeof(float) * dev->width * dev->height * 2);
+
+	if (!samps || !floats)
+		return -ENOMEM;
+
+	/* extract packed 10 bit samples, 4 words are the 8 bit IQ samples,
+	 * and the 5th word contains the packed lower two bits of each I and Q sample */
+	for (i = 0; i < length; i += 5) {
+		uint16_t lsbs = buf[i+4];
+
+		samps[j++] = ((buf[i+0] & 0xff00) >> 6) | ((lsbs >>  0) & 3);
+		samps[j++] = ((buf[i+0] & 0x00ff) << 2) | ((lsbs >>  2) & 3);
+		samps[j++] = ((buf[i+1] & 0xff00) >> 6) | ((lsbs >>  4) & 3);
+		samps[j++] = ((buf[i+1] & 0x00ff) << 2) | ((lsbs >>  6) & 3);
+		samps[j++] = ((buf[i+2] & 0xff00) >> 6) | ((lsbs >>  8) & 3);
+		samps[j++] = ((buf[i+2] & 0x00ff) << 2) | ((lsbs >> 10) & 3);
+		samps[j++] = ((buf[i+3] & 0xff00) >> 6) | ((lsbs >> 12) & 3);
+		samps[j++] = ((buf[i+3] & 0x00ff) << 2) | ((lsbs >> 14) & 3);
+	}
+
+	for (i = 0; i < j; i += 2) {
+		floats[i] = (samps[i] - 511.5) * (1/512.0);
+		floats[i+1] = (samps[i+1] - 511.5) * (1/512.0);
+	}
+
+	hsdaoh_remove_dc_offset(dev, floats, j);
+
+	if (dev->cb)
+		dev->cb((uint8_t *)floats, j * sizeof(float), dev->cb_ctx);
+
+	free(floats);
+	free(samps);
+
+	return 0;
+}
+
+int hsdaoh_handle_payload_8bit(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
+{
+	float *floats = malloc(sizeof(float) * dev->width * dev->height * 2);
+
+	if (!floats)
+		return -ENOMEM;
+
+	for (unsigned int i = 0; i < length * 2; i += 2) {
+		float sample_i = (buf[i/2] >> 8) & 0xff;
+		float sample_q = (buf[i/2] & 0xff);
+
+		floats[i] = (sample_i - 127.4) * (1/128.0);
+		floats[i+1] = (sample_q - 127.4) * (1/128.0);
+	}
+
+	hsdaoh_remove_dc_offset(dev, floats, length * 2);
+
+	if (dev->cb)
+		dev->cb((uint8_t *)floats, length * 2 * sizeof(float), dev->cb_ctx);
+
+	free(floats);
+
+	return 0;
+}
+
 /* callback for idle/filler data */
 inline int hsdaoh_check_idle_cnt(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
 {
@@ -626,8 +719,13 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		frame_payload_bytes += payload_len*2;
 	}
 
-	if (dev->cb)
-		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
+	if (meta.pack_state & 0x10)
+		hsdaoh_handle_payload_10bit(dev, (uint16_t *)data, frame_payload_bytes/sizeof(uint16_t));
+	else
+		hsdaoh_handle_payload_8bit(dev, (uint16_t *)data, frame_payload_bytes/sizeof(uint16_t));
+
+//	if (dev->cb)
+//		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
 
 	if (frame_errors && dev->stream_synced) {
 		fprintf(stderr,"%d idle counter errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
