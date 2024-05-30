@@ -5,7 +5,7 @@ This project aims to (ab)use cheap USB 3.0 HDMI capture sticks based on the Macr
 In combination with small FPGA boards with HDMI interface like the Tang Nano series, it can be used to capture high speed data streams from an external data source like an ADC, do-it-yourself SDR, or simply build a high speed logic analyzer.
 
 For more information, please take a look at the slides of the presentation at OsmoDevcon 2024 [here](https://people.osmocom.org/steve-m/hsdaoh_slides/rendered/osmodevcon2024_hsdaoh.pdf).
-A proper video recording will be available soon, for now there is only a [streamdump](https://relive.c3voc.de/relive/osmodevcon24/200/muxed.mp4) (the actual talk starts at 17:23).
+A video recording of the talk can be found at [media.ccc.de](https://media.ccc.de/v/osmodevcon2024-200-low-cost-high-speed-data-acquisition-over-hdmi).
 
 ## Getting started
 
