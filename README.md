@@ -6,6 +6,7 @@ In combination with small FPGA boards with HDMI interface like the Tang Nano ser
 
 For more information, please take a look at the slides of the presentation at OsmoDevcon 2024 [here](https://people.osmocom.org/steve-m/hsdaoh_slides/rendered/osmodevcon2024_hsdaoh.pdf).
 A video recording of the talk can be found at [media.ccc.de](https://media.ccc.de/v/osmodevcon2024-200-low-cost-high-speed-data-acquisition-over-hdmi).
+The hardware design files of the hsdaohSDR prototype shown in the talk can be found [here](https://github.com/steve-m/hsdaohSDR).
 
 ## Getting started
 
