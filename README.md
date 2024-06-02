@@ -8,6 +8,8 @@ For more information, please take a look at the slides of the presentation at Os
 A video recording of the talk can be found at [media.ccc.de](https://media.ccc.de/v/osmodevcon2024-200-low-cost-high-speed-data-acquisition-over-hdmi).
 The hardware design files of the hsdaohSDR prototype shown in the talk can be found [here](https://github.com/steve-m/hsdaohSDR).
 
+![Screenshot of hsdaoh data stream](https://steve-m.de/projects/hsdaoh/hsdaoh_screenshot.jpg)
+
 ## Getting started
 
 You need at least two pieces of hardware:
