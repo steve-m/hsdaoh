@@ -3,6 +3,7 @@
 This project aims to (ab)use cheap USB 3.0 HDMI capture sticks based on the MacroSilicon MS2130 as a general purpose USB interface.
 
 In combination with small FPGA boards with HDMI interface like the Tang Nano series, it can be used to capture high speed data streams from an external data source like an ADC, do-it-yourself SDR, or simply build a high speed logic analyzer.
+Furthermore, instead of an FPGA board, the Raspberry Pi RP2350 also can be used, see [hsdaoh-rp2350](https://github.com/steve-m/hsdaoh-rp2350).
 
 For more information, please take a look at the slides of the presentation at OsmoDevcon 2024 [here](https://people.osmocom.org/steve-m/hsdaoh_slides/rendered/osmodevcon2024_hsdaoh.pdf).
 A video recording of the talk can be found at [media.ccc.de](https://media.ccc.de/v/osmodevcon2024-200-low-cost-high-speed-data-acquisition-over-hdmi).
@@ -20,6 +21,9 @@ Just make sure that it is marked as a real USB 3.0 device (most of them are mark
 
 ### FPGA board with HDMI out
 The main target are currently the Tang Nano series of boards (4K, 9K and 20K). The Tang Primer boards as well as the EBAZ4205 also have been tested.
+
+### Alternatively: A Raspberry Pi RP2350 based board
+With [hsdaoh-rp2350](https://github.com/steve-m/hsdaoh-rp2350), it is possible to reach transfer rates of up to 75 MByte/s, and the PIO state machines offer a flexible interface for connecting external data sources.
 
 ## First run
 
