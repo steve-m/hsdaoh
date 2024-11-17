@@ -41,11 +41,13 @@
 #endif
 
 #include <inttypes.h>
+#include <endian.h>
 #include <libusb.h>
 #include <libuvc/libuvc.h>
 //#include <math.h>
 #include <hsdaoh_i2c.h>
 #include <hsdaoh.h>
+#include <crc.h>
 
 /*
  * All libusb callback functions should be marked with the LIBUSB_CALL macro
@@ -85,6 +87,7 @@ struct hsdaoh_dev {
 	int frames_since_error;
 	int discard_start_frames;
 	uint16_t last_frame_cnt;
+	uint16_t last_crc;
 	uint16_t idle_cnt;
 	bool stream_synced;
 
@@ -110,11 +113,19 @@ static hsdaoh_adapter_t known_devices[] = {
 	{ 0x345f, 0x2131, "MS2131" },
 };
 
+enum crc_config {
+	CRC_NONE,
+	CRC16_PREV_LINE,
+};
+
 typedef struct
 {
 	uint32_t magic;
 	uint16_t framecounter;
 	uint8_t  pack_state;
+	uint8_t  crc_config;
+	uint8_t  data_width;
+	uint8_t  data_signedness;
 } __attribute__((packed, aligned(1))) metadata_t;
 
 #define CTRL_TIMEOUT	300
@@ -584,7 +595,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	metadata_t meta;
 	hsdaoh_extract_metadata(data, &meta, dev->width);
 
-	if (meta.magic != 0xda7acab1)
+	if (le32toh(meta.magic) != 0xda7acab1)
 		return;
 
 	/* drop duplicated frames */
@@ -605,7 +616,8 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		uint8_t *line_dat = data + (dev->width * 2 * i);
 
 		/* extract number of payload words from reserved field at end of line */
-		uint16_t payload_len = (line_dat[dev->width*2-1] << 8) | line_dat[dev->width*2-2];
+		uint16_t payload_len = le16toh(((uint16_t *)line_dat)[dev->width - 1]);
+		uint16_t crc = le16toh(((uint16_t *)line_dat)[dev->width - 2]);
 
 		/* we only use 12 bits, the upper 4 bits are reserved for the metadata */
 		payload_len &= 0x0fff;
@@ -617,8 +629,15 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 			return;
 		}
 
-		uint16_t idle_len = (dev->width-1) - payload_len;
-		frame_errors += hsdaoh_check_idle_cnt(dev, (uint16_t *)line_dat + payload_len, idle_len);
+		if (meta.crc_config == CRC_NONE) {
+			uint16_t idle_len = (dev->width-1) - payload_len;
+			frame_errors += hsdaoh_check_idle_cnt(dev, (uint16_t *)line_dat + payload_len, idle_len);
+		} else if (meta.crc_config == CRC16_PREV_LINE) {
+			if ((crc != dev->last_crc) && dev->stream_synced)
+				frame_errors++;
+
+			dev->last_crc = crc16_ccitt(line_dat, dev->width * 2);
+		}
 
 		if (payload_len > 0)
 			memmove(data + frame_payload_bytes, line_dat, payload_len * sizeof(uint16_t));
@@ -630,7 +649,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
 
 	if (frame_errors && dev->stream_synced) {
-		fprintf(stderr,"%d idle counter errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
+		fprintf(stderr,"%d frame errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
 		dev->frames_since_error = 0;
 	} else
 		dev->frames_since_error++;
