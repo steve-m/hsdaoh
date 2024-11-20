@@ -190,7 +190,8 @@ void hsdaoh_ms_enable_transparent_mode(hsdaoh_dev_t *dev)
 	 * no warranty! */
 
 	/* force YCbCr 4:2:2/YUV input, default is 0x04 (RGB) */
-	hsdaoh_ms_write_register(dev, 0xf039, 0x06);
+	hsdaoh_ms_write_register(dev, 0xf039, 0x00);
+	hsdaoh_ms_write_register(dev, 0xf030, 0x02);
 
 	/* disable sharpening */
 	hsdaoh_ms_write_register(dev, 0xf6b0, 0x00);
