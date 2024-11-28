@@ -589,6 +589,30 @@ inline void hsdaoh_extract_metadata(uint8_t *data, metadata_t *metadata, unsigne
 		meta[j++] = (data[((i+1)*width*2) - 1] >> 4) | (data[((i+2)*width*2) - 1] & 0xf0);
 }
 
+
+void hsdaoh_unpack_12bit(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
+{
+	// We receive three 16-bit words containing four 12-bit samples (sample A - D)
+	// First word:  A11 A10 A09 A08 A07 A06 A05 A04 A03 A02 A01 A00 B03 B02 B01 B00
+	// Second word: B11 B10 B09 B08 B07 B06 B05 B04 C07 C06 C05 C04 C03 C02 C01 C00
+	// Third word:  D11 D10 D09 D08 D07 D06 D05 D04 D03 D02 D01 D00 C11 C10 C09 C08
+
+	uint16_t *out = malloc(sizeof(uint16_t) * dev->width * dev->height  * 2);
+	unsigned int j = 0;
+
+	for (unsigned int i = 0; i < length; i += 3) {
+		out[j++] = buf[i] >> 4;						// Sample A
+		out[j++] = ((buf[i+1] & 0xff00) >> 4) | (buf[i] & 0x000f);	// Sample B
+		out[j++] = ((buf[i+2] & 0x000f) << 8) | (buf[i+1] & 0x00ff);	// Sample C
+		out[j++] = buf[i+2] >> 4;					// Sample D
+	}
+
+	if (dev->cb)
+		dev->cb((uint8_t *)out, j * sizeof(uint16_t), dev->cb_ctx);
+
+	free(out);
+}
+
 void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 {
 	uint32_t frame_payload_bytes = 0;
@@ -647,8 +671,10 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		frame_payload_bytes += payload_len*2;
 	}
 
-	if (dev->cb)
-		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
+//	if (dev->cb)
+//		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
+
+	hsdaoh_unpack_12bit(dev, (uint16_t *)data, frame_payload_bytes/sizeof(uint16_t));
 
 	if (frame_errors && dev->stream_synced) {
 		fprintf(stderr,"%d frame errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
