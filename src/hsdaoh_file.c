@@ -79,6 +79,8 @@ static void sighandler(int signum)
 
 static void hsdaoh_callback(unsigned char *buf, uint32_t len, void *ctx)
 {
+	size_t nbytes = 0;
+
 	if (ctx) {
 		if (do_exit)
 			return;
@@ -89,9 +91,15 @@ static void hsdaoh_callback(unsigned char *buf, uint32_t len, void *ctx)
 			hsdaoh_stop_stream(dev);
 		}
 
-		if (fwrite(buf, 1, len, (FILE*)ctx) != len) {
-			fprintf(stderr, "Short write, samples lost, exiting!\n");
-			hsdaoh_stop_stream(dev);
+		while (nbytes < len) {
+			nbytes += fwrite(buf + nbytes, 1, len - nbytes, (FILE*)ctx);
+
+			if (ferror((FILE*)ctx)) {
+				fprintf(stderr, "Error writing file, samples lost, exiting!\n");
+				hsdaoh_stop_stream(dev);
+				break;
+			}
+
 		}
 
 		if (bytes_to_read > 0)

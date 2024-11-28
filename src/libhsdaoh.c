@@ -624,7 +624,8 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		payload_len &= 0x0fff;
 
 		if (payload_len > dev->width-1) {
-			fprintf(stderr, "Invalid payload length: %d\n", payload_len);
+			if (dev->stream_synced)
+				fprintf(stderr, "Invalid payload length: %d\n", payload_len);
 
 			/* discard frame */
 			return;
