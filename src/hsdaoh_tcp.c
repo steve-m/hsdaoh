@@ -147,8 +147,12 @@ static void sighandler(int signum)
 }
 #endif
 
-void hsdaoh_callback(unsigned char *buf, uint32_t len, void *ctx)
+void hsdaoh_callback(hsdaoh_data_info_t *data_info)
 {
+	unsigned char *buf = data_info->buf;
+	uint32_t len = data_info->len;
+	void *ctx = data_info->ctx;
+
 	if(!do_exit) {
 		struct llist *rpt = (struct llist*)malloc(sizeof(struct llist));
 		rpt->data = (char*)malloc(len);
