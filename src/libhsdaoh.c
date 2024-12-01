@@ -589,6 +589,33 @@ inline void hsdaoh_extract_metadata(uint8_t *data, metadata_t *metadata, unsigne
 		meta[j++] = (data[((i+1)*width*2) - 1] >> 4) | (data[((i+2)*width*2) - 1] & 0xf0);
 }
 
+int hsdaoh_handle_payload_16bit(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
+{
+	unsigned int i, j = 0;
+
+	float *floats = malloc(sizeof(float) * dev->width * dev->height * 2 *4);
+
+	if (!floats)
+		return -ENOMEM;
+
+	for (unsigned int i = 0; i < length; i++) {
+		float sample_i = buf[i] & 0xfff;
+		floats[j++] = (sample_i - 2047) * (1/2048.0);
+		floats[j++] = (sample_i - 2047) * (1/2048.0);
+	}
+
+	hsdaoh_data_info_t data_info;
+	data_info.stream_id = 0;
+	data_info.buf = (uint8_t *)floats;
+	data_info.len = length * 2 * sizeof(float);
+	data_info.ctx = dev->cb_ctx;
+
+	if (dev->cb)
+		dev->cb(&data_info);
+
+	free(floats);
+	return 0;
+}
 
 void hsdaoh_unpack_12bit(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
 {
@@ -600,17 +627,48 @@ void hsdaoh_unpack_12bit(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
 	uint16_t *out = malloc(sizeof(uint16_t) * dev->width * dev->height  * 2);
 	unsigned int j = 0;
 
-	for (unsigned int i = 0; i < length; i += 3) {
+	for (unsigned int i = 0; i < length/sizeof(uint16_t); i += 3) {
 		out[j++] = buf[i] >> 4;						// Sample A
 		out[j++] = ((buf[i+1] & 0xff00) >> 4) | (buf[i] & 0x000f);	// Sample B
 		out[j++] = ((buf[i+2] & 0x000f) << 8) | (buf[i+1] & 0x00ff);	// Sample C
 		out[j++] = buf[i+2] >> 4;					// Sample D
 	}
 
+#ifdef OUTPUT_FLOAT
+	hsdaoh_handle_payload_16bit(dev, out, j);
+#else
+	hsdaoh_data_info_t data_info;
+	data_info.stream_id = 0;
+	data_info.buf = (uint8_t *)out;
+	data_info.len = j * sizeof(uint16_t);
+	data_info.ctx = dev->cb_ctx;
+
 	if (dev->cb)
-		dev->cb((uint8_t *)out, j * sizeof(uint16_t), dev->cb_ctx);
+		dev->cb(&data_info);
+#endif
 
 	free(out);
+}
+
+void hsdaoh_unpack_audio_samples(hsdaoh_dev_t *dev, uint32_t *buf, size_t length)
+{
+	for (unsigned int i = 0; i < length; i++) {
+		/* sign extension */
+		if (buf[i] & (1 << 23))
+			buf[i] |= 0xff000000;
+		else
+			buf[i] &= 0x00ffffff;
+
+	}
+
+	hsdaoh_data_info_t data_info;
+	data_info.stream_id = 1;
+	data_info.buf = (uint8_t *)buf;
+	data_info.len = length * sizeof(uint32_t);
+	data_info.ctx = dev->cb_ctx;
+
+	if (dev->cb)
+		dev->cb(&data_info);
 }
 
 void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
@@ -629,12 +687,11 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 
 	if (dev->stream_synced) {
 		if (meta.framecounter != ((dev->last_frame_cnt + 1) & 0xffff))
-			printf("Missed at least one frame, fcnt %d, expected %d!\n",
+			fprintf(stderr, "Missed at least one frame, fcnt %d, expected %d!\n",
 			       meta.framecounter, ((dev->last_frame_cnt + 1) & 0xffff));
 	}
 
 	dev->last_frame_cnt = meta.framecounter;
-
 	int frame_errors = 0;
 
 	for (unsigned int i = 0; i < dev->height; i++) {
@@ -643,6 +700,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		/* extract number of payload words from reserved field at end of line */
 		uint16_t payload_len = le16toh(((uint16_t *)line_dat)[dev->width - 1]);
 		uint16_t crc = le16toh(((uint16_t *)line_dat)[dev->width - 2]);
+		uint16_t stream_id = le16toh(((uint16_t *)line_dat)[dev->width - 3]);
 
 		/* we only use 12 bits, the upper 4 bits are reserved for the metadata */
 		payload_len &= 0x0fff;
@@ -665,16 +723,18 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 			dev->last_crc = crc16_ccitt(line_dat, dev->width * 2);
 		}
 
-		if (payload_len > 0)
-			memmove(data + frame_payload_bytes, line_dat, payload_len * sizeof(uint16_t));
+		if (stream_id == 0) {
+			if (payload_len > 0)
+				memmove(data + frame_payload_bytes, line_dat, payload_len * sizeof(uint16_t));
 
-		frame_payload_bytes += payload_len*2;
+			frame_payload_bytes += payload_len * sizeof(uint16_t);
+		} else if (stream_id == 1) {
+			if (payload_len > 0)
+				hsdaoh_unpack_audio_samples(dev, (uint32_t *)line_dat, (payload_len * sizeof(uint16_t))/sizeof(uint32_t));
+		}
 	}
 
-//	if (dev->cb)
-//		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
-
-	hsdaoh_unpack_12bit(dev, (uint16_t *)data, frame_payload_bytes/sizeof(uint16_t));
+	hsdaoh_unpack_12bit(dev, (uint16_t *)data, frame_payload_bytes);
 
 	if (frame_errors && dev->stream_synced) {
 		fprintf(stderr,"%d frame errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
