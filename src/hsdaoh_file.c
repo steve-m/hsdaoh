@@ -87,9 +87,8 @@ static void hsdaoh_callback(hsdaoh_data_info_t *data_info)
 {
 	size_t nbytes = 0;
 	uint32_t len = data_info->len;
-	void *ctx = data_info->ctx;
 
-	if (!ctx || do_exit)
+	if (!data_info->ctx || do_exit)
 		return;
 
 	if (data_info->stream_id >= FD_NUMS)
@@ -112,7 +111,7 @@ static void hsdaoh_callback(hsdaoh_data_info_t *data_info)
 	while (nbytes < len) {
 		nbytes += fwrite(data_info->buf + nbytes, 1, len - nbytes, file);
 
-			if (ferror((FILE*)ctx)) {
+		if (ferror(file)) {
 			fprintf(stderr, "Error writing file, samples lost, exiting!\n");
 			hsdaoh_stop_stream(dev);
 			break;
