@@ -130,6 +130,18 @@ HSDAOH_API int hsdaoh_start_stream(hsdaoh_dev_t *dev,
  */
 HSDAOH_API int hsdaoh_stop_stream(hsdaoh_dev_t *dev);
 
+/*!
+ * Write a datagram to the EDID RAM to control a downstream data source.
+ * A header with a sequence number and length is prepended to the mesage
+ * by the library.
+ *
+ * \param dev the device handle given by hsdaoh_open()
+ * \param data pointer to the datagram
+ * \param len length of the datagram, must not exceed 256-2 = 254 bytes
+ *            due to the prepended header.
+ * \return 0 on success
+ */
+HSDAOH_API int hsdaoh_write_edid_cmd_data(hsdaoh_dev_t *dev, uint8_t *data, uint8_t len);
 #ifdef __cplusplus
 }
 #endif

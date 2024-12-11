@@ -84,6 +84,7 @@ struct hsdaoh_dev {
 
 	int hid_interface;
 
+	uint8_t edid_seq_cnt;
 	int frames_since_error;
 	int discard_start_frames;
 	uint16_t last_frame_cnt;
@@ -179,6 +180,40 @@ int hsdaoh_read_register(hsdaoh_dev_t *dev, uint16_t addr, uint8_t *val)
 		*val = resp[3];
 
 	return r;
+}
+
+/* Write a datagram to the EDID RAM to control a downstream data source */
+int hsdaoh_write_edid_cmd_data(hsdaoh_dev_t *dev, uint8_t *data, uint8_t len)
+{
+	if (!dev || !data || (len > 254))
+		return -1;
+
+	/* increment sequence counter and avoid values 0x00 and 0xff */
+	dev->edid_seq_cnt++;
+	if (!dev->edid_seq_cnt || (dev->edid_seq_cnt == 0xff))
+		dev->edid_seq_cnt = 1;
+
+	/* disable I2C access to EDID RAM, reading via I2C will result in a NAK */
+	hsdaoh_ms_write_register(dev, 0xf063, 0x00);
+
+	/* switch EDID RAM to 8051 */
+	hsdaoh_ms_write_register(dev, 0xf062, 0x80);
+
+	/* store header with sequence counter and length of data */
+	hsdaoh_ms_write_register(dev, 0xf900, dev->edid_seq_cnt);
+	hsdaoh_ms_write_register(dev, 0xf901, len);
+
+	/* store actual data to the EDID RAM */
+	for (uint8_t i = 0; i < len; i++)
+		hsdaoh_ms_write_register(dev, 0xf902 + i, data[i]);
+
+	/* switch EDID RAM to DDC I2C slave */
+	hsdaoh_ms_write_register(dev, 0xf062, 0x00);
+
+	/* re-enable I2C access to EDID RAM */
+	hsdaoh_ms_write_register(dev, 0xf063, 0x08);
+
+	return 0;
 }
 
 /* Switch the MS2130 to a transparent mode, YUYV data received via HDMI
