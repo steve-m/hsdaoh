@@ -412,12 +412,6 @@ int hsdaoh_clear_endpoint_halt(hsdaoh_dev_t *dev)
 		}
 	}
 
-	r = libusb_claim_interface(dev->devh, dev->hid_interface);
-	if (r < 0) {
-		fprintf(stderr, "usb_claim_interface hid error %d\n", r);
-		return r;
-	}
-
 	r = libusb_claim_interface(dev->devh, 1);
 	if (r < 0) {
 		fprintf(stderr, "usb_claim_interface 1 error %d\n", r);
@@ -437,8 +431,7 @@ int _hsdaoh_open_uvc_device(hsdaoh_dev_t *dev)
 {
 	uvc_error_t r;
 
-	/* Initialize UVC context. In theory it should be possible to re-use our
-	 * libusb context, but for whatever reason that does not work */
+	/* Initialize UVC context */
 	r = uvc_init(&dev->uvc_ctx, NULL);
 
 	if (r < 0) {
@@ -456,9 +449,8 @@ int _hsdaoh_open_uvc_device(hsdaoh_dev_t *dev)
 		/* Try to open the device: requires exclusive access */
 		r = uvc_open(dev->uvc_dev, &dev->uvc_devh);
 
-		if (r < 0) {
+		if (r < 0)
 			uvc_perror(r, "uvc_open"); /* unable to open device */
-		}
 	}
 
 	return (int)r;
@@ -513,21 +505,28 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 		device = NULL;
 	}
 
+	dev->vid = dd.idVendor;
+	dev->pid = dd.idProduct;
+
+	libusb_free_device_list(list, 1);
+	libusb_exit(dev->ctx);
+
 	if (!device) {
 		r = -1;
 		goto err;
 	}
 
-	dev->vid = dd.idVendor;
-	dev->pid = dd.idProduct;
-
-	r = libusb_open(device, &dev->devh);
-	libusb_free_device_list(list, 1);
+	r = _hsdaoh_open_uvc_device(dev);
 	if (r < 0) {
-		fprintf(stderr, "usb_open error %d\n", r);
-		if(r == LIBUSB_ERROR_ACCESS)
+		if (r == LIBUSB_ERROR_ACCESS)
 			fprintf(stderr, "Please fix the device permissions, e.g. "
 			"by installing the udev rules file\n");
+		goto err;
+	}
+
+	dev->devh = uvc_get_libusb_handle(dev->uvc_devh);
+	if (!dev->devh) {
+		fprintf(stderr, "Failed to get libusb device handle\n");
 		goto err;
 	}
 
@@ -541,11 +540,14 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 		}
 	}
 
+	r = libusb_claim_interface(dev->devh, dev->hid_interface);
+	if (r < 0) {
+		fprintf(stderr, "usb_claim_interface hid error %d\n", r);
+		return r;
+	}
+
 	if (hsdaoh_clear_endpoint_halt(dev) < 0)
 		goto err;
-
-	_hsdaoh_open_uvc_device(dev);
-
 
 	//dev->rate = DEFAULT_SAMPLERATE;
 	dev->dev_lost = 0;
@@ -555,12 +557,8 @@ found:
 
 	return 0;
 err:
-	if (dev) {
-		if (dev->ctx)
-			libusb_exit(dev->ctx);
-
+	if (dev)
 		free(dev);
-	}
 
 	return r;
 }
@@ -573,11 +571,6 @@ int hsdaoh_close(hsdaoh_dev_t *dev)
 	if (HSDAOH_INACTIVE != dev->async_status)
 		uvc_stop_streaming(dev->uvc_devh);
 
-
-	uvc_close(dev->uvc_devh);
-	uvc_unref_device(dev->uvc_dev);
-	uvc_exit(dev->uvc_ctx);
-
 	libusb_release_interface(dev->devh, dev->hid_interface);
 
 	//TODO: only re-attach kernel driver if it was attached previously
@@ -586,8 +579,10 @@ int hsdaoh_close(hsdaoh_dev_t *dev)
 	else
 			fprintf(stderr, "Reattaching kernel driver failed!\n");
 
-	libusb_close(dev->devh);
-	libusb_exit(dev->ctx);
+	uvc_close(dev->uvc_devh);
+	uvc_unref_device(dev->uvc_dev);
+	uvc_exit(dev->uvc_ctx);
+
 	free(dev);
 
 	return 0;
@@ -782,12 +777,5 @@ int hsdaoh_stop_stream(hsdaoh_dev_t *dev)
 		return 0;
 	}
 
-	/* if called while in pending state, change the state forcefully */
-#if 0
-	if (HSDAOH_INACTIVE != dev->async_status) {
-		dev->async_status = HSDAOH_INACTIVE;
-		return 0;
-	}
-#endif
 	return -2;
 }
