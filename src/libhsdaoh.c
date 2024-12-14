@@ -31,20 +31,17 @@
 #include <stdbool.h>
 #ifndef _WIN32
 #include <unistd.h>
-#endif
-
-#ifdef _MSC_VER
+#include <endian.h>
+#else
 #include <windows.h>
 #define usleep(t) Sleep((t)/1000)
-#else
-#include <unistd.h>
+#define le32toh(x) (x)
+#define le16toh(x) (x)
 #endif
 
 #include <inttypes.h>
-#include <endian.h>
 #include <libusb.h>
 #include <libuvc/libuvc.h>
-//#include <math.h>
 #include <hsdaoh_i2c.h>
 #include <hsdaoh.h>
 #include <crc.h>
