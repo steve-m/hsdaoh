@@ -84,6 +84,7 @@ struct hsdaoh_dev {
 	uint8_t edid_seq_cnt;
 	int frames_since_error;
 	int discard_start_frames;
+	unsigned int in_order_cnt;
 	uint16_t last_frame_cnt;
 	uint16_t last_crc;
 	uint16_t idle_cnt;
@@ -623,18 +624,22 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	metadata_t meta;
 	hsdaoh_extract_metadata(data, &meta, dev->width);
 
-	if (le32toh(meta.magic) != 0xda7acab1)
+	if (le32toh(meta.magic) != 0xda7acab1) {
+		dev->stream_synced = false;
 		return;
+	}
 
 	/* drop duplicated frames */
 	if (meta.framecounter == dev->last_frame_cnt)
 		return;
 
-	if (dev->stream_synced) {
-		if (meta.framecounter != ((dev->last_frame_cnt + 1) & 0xffff))
+	if (meta.framecounter != ((dev->last_frame_cnt + 1) & 0xffff)) {
+		dev->in_order_cnt = 0;
+		if (dev->stream_synced)
 			printf("Missed at least one frame, fcnt %d, expected %d!\n",
-			       meta.framecounter, ((dev->last_frame_cnt + 1) & 0xffff));
-	}
+				meta.framecounter, ((dev->last_frame_cnt + 1) & 0xffff));
+	} else
+		dev->in_order_cnt++;
 
 	dev->last_frame_cnt = meta.framecounter;
 
@@ -674,7 +679,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		frame_payload_bytes += payload_len*2;
 	}
 
-	if (dev->cb)
+	if (dev->cb && dev->stream_synced)
 		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
 
 	if (frame_errors && dev->stream_synced) {
@@ -683,7 +688,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	} else
 		dev->frames_since_error++;
 
-	if (!dev->stream_synced) {
+	if (!dev->stream_synced && !frame_errors && (dev->in_order_cnt > 4)) {
 		fprintf(stderr, "Syncronized to HDMI input stream\n");
 		dev->stream_synced = true;
 	}
@@ -747,7 +752,7 @@ int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx)
 		uvc_perror(res, "get_mode"); /* device doesn't provide a matching stream */
 	} else {
 		/* start the UVC stream */
-		dev->discard_start_frames = 60;
+		dev->discard_start_frames = 30;
 		res = uvc_start_streaming(dev->uvc_devh, &ctrl, _uvc_callback, (void *)dev, 0);
 
 		if (res < 0) {
