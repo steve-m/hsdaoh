@@ -68,8 +68,43 @@ To make sure the group exists and add your user to it, run:
 
 If you haven't already been a member, you need to logout and login again for the group membership to become effective.
 
-### Windows and Mac OS X
-As libuvc and libusb are cross-platform libraries, it should be able to build libhsdaoh for Win/OSX as well. As of now, this is untested.
+### Build on Windows
+#### Install dependencies
+- Install MSYS2 (https://www.msys2.org/)
+- Start MSYS2 MINGW64 from the application menu
+
+```console
+# Update all packages
+pacman -Suy
+
+# Install the required dependencies:
+pacman -S git zip mingw-w64-x86_64-libusb mingw-w64-x86_64-libwinpthread mingw-w64-x86_64-cc \
+mingw-w64-x86_64-gcc-libs mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+```
+
+#### Build libuvc
+```console
+# Clone the repository:
+git clone https://github.com/steve-m/libuvc.git
+mkdir libuvc/build && cd libuvc/build
+cmake ../ -DCMAKE_INSTALL_PREFIX:PATH=/mingw64
+cmake --build .
+cmake --install .
+```
+
+#### Build libhsdaoh
+```console
+cd ~
+git clone https://github.com/steve-m/hsdaoh.git
+mkdir hsdaoh/build && cd hsdaoh/build
+cmake ../
+cmake --build .
+# Gather all files required for release
+zip -j hsdaoh_win_release.zip src/*.exe src/*.dll /mingw64/bin/libusb-1.0.dll /mingw64/bin/libuvc.dll /mingw64/bin/libwinpthread-1.dll
+```
+
+### Mac OS X
+As libuvc and libusb are cross-platform libraries, it should be able to build libhsdaoh for OS X as well. As of now, this is untested.
 
 ## Applications
 
