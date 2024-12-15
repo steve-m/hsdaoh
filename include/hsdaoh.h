@@ -87,25 +87,6 @@ HSDAOH_API int hsdaoh_close(hsdaoh_dev_t *dev);
 HSDAOH_API int hsdaoh_get_usb_strings(hsdaoh_dev_t *dev, char *manufact,
 				      char *product, char *serial);
 
-/*!
- * Set the sample rate for the device
- *
- * \param dev the device handle given by hsdaoh_open()
- * \param samp_rate the sample rate to be set
- * \param ext_clock if true, use the IFCLK input insteafd of internal clock source
- *		    if a Si5351 is connected, it will be configured
- * \return 0 on success, -EINVAL on invalid rate
- */
-HSDAOH_API int hsdaoh_set_sample_rate(hsdaoh_dev_t *dev, uint32_t rate, bool ext_clock);
-
-/*!
- * Get actual sample rate the device is configured to.
- *
- * \param dev the device handle given by hsdaoh_open()
- * \return 0 on error, sample rate in Hz otherwise
- */
-HSDAOH_API uint32_t hsdaoh_get_sample_rate(hsdaoh_dev_t *dev);
-
 /* streaming functions */
 
 typedef void(*hsdaoh_read_cb_t)(unsigned char *buf, uint32_t len, void *ctx);

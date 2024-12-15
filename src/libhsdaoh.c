@@ -42,19 +42,8 @@
 #include <inttypes.h>
 #include <libusb.h>
 #include <libuvc/libuvc.h>
-#include <hsdaoh_i2c.h>
 #include <hsdaoh.h>
 #include <crc.h>
-
-/*
- * All libusb callback functions should be marked with the LIBUSB_CALL macro
- * to ensure that they are compiled with the same calling convention as libusb.
- *
- * If the macro isn't available in older libusb versions, we simply define it.
- */
-#ifndef LIBUSB_CALL
-#define LIBUSB_CALL
-#endif
 
 enum hsdaoh_async_status {
 	HSDAOH_INACTIVE = 0,
@@ -76,8 +65,6 @@ struct hsdaoh_dev {
 	uvc_context_t *uvc_ctx;
 	uvc_device_t *uvc_dev;
 	uvc_device_handle_t *uvc_devh;
-
-	uint32_t rate; /* Hz */
 
 	int hid_interface;
 
@@ -245,18 +232,6 @@ void hsdaoh_ms_enable_transparent_mode(hsdaoh_dev_t *dev)
 	hsdaoh_ms_write_register(dev, 0xf600, 0x80);
 }
 
-int hsdaoh_i2c_write_fn(void *dev, uint8_t addr, uint8_t *buf, uint16_t len)
-{
-
-	return -1;
-}
-
-int hsdaoh_i2c_read_fn(void *dev, uint8_t addr, uint8_t *buf, uint16_t len)
-{
-
-	return -1;
-}
-
 int hsdaoh_get_usb_strings(hsdaoh_dev_t *dev, char *manufact, char *product,
 			    char *serial)
 {
@@ -296,19 +271,6 @@ int hsdaoh_get_usb_strings(hsdaoh_dev_t *dev, char *manufact, char *product,
 	}
 
 	return 0;
-}
-
-int hsdaoh_set_sample_rate(hsdaoh_dev_t *dev, uint32_t samp_rate, bool ext_clock)
-{
-	return 0;
-}
-
-uint32_t hsdaoh_get_sample_rate(hsdaoh_dev_t *dev)
-{
-	if (!dev)
-		return 0;
-
-	return dev->rate;
 }
 
 static hsdaoh_adapter_t *find_known_device(uint16_t vid, uint16_t pid)
@@ -550,7 +512,6 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 	if (hsdaoh_clear_endpoint_halt(dev) < 0)
 		goto err;
 
-	//dev->rate = DEFAULT_SAMPLERATE;
 	dev->dev_lost = 0;
 
 found:

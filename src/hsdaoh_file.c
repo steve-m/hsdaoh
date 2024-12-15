@@ -37,8 +37,6 @@
 
 #include "hsdaoh.h"
 
-#define DEFAULT_SAMPLE_RATE		30000000
-
 static int do_exit = 0;
 static uint32_t bytes_to_read = 0;
 static hsdaoh_dev_t *dev = NULL;
@@ -48,7 +46,6 @@ void usage(void)
 	fprintf(stderr,
 		"hsdaoh_file, HDMI data acquisition tool\n\n"
 		"Usage:\n"
-		"\t[-s samplerate (default: 30 MHz)]\n"
 		"\t[-d device_index (default: 0)]\n"
 		"\t[-p ppm_error (default: 0)]\n"
 		"\t[-n number of samples to read (default: 0, infinite)]\n"
@@ -119,15 +116,11 @@ int main(int argc, char **argv)
 	int ppm_error = 0;
 	FILE *file;
 	int dev_index = 0;
-	uint32_t samp_rate = DEFAULT_SAMPLE_RATE;
 
-	while ((opt = getopt(argc, argv, "d:s:n:p:d:")) != -1) {
+	while ((opt = getopt(argc, argv, "d:n:p:d:")) != -1) {
 		switch (opt) {
 		case 'd':
 			dev_index = (uint32_t)atoi(optarg);
-			break;
-		case 's':
-			samp_rate = (uint32_t)atof(optarg);
 			break;
 		case 'p':
 			ppm_error = atoi(optarg);
@@ -167,11 +160,6 @@ int main(int argc, char **argv)
 #else
 	SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
-
-	/* Set the sample rate */
-	r = hsdaoh_set_sample_rate(dev, samp_rate, 0);
-	if (r < 0)
-		fprintf(stderr, "WARNING: Failed to set sample rate.\n");
 
 	if (strcmp(filename, "-") == 0) { /* Write samples to stdout */
 		file = stdout;

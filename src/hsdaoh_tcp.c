@@ -60,7 +60,6 @@ typedef int socklen_t;
 #endif
 
 #define DEFAULT_PORT_STR "1234"
-#define DEFAULT_SAMPLE_RATE_HZ 30000000
 #define DEFAULT_MAX_NUM_BUFFERS 500
 
 static SOCKET s;
@@ -102,7 +101,6 @@ void usage(void)
 	fprintf(stderr, "\t[-b number of buffers (default: 15, set by library)]\n");
 	fprintf(stderr, "\t[-n max number of linked list buffers to keep (default: %d)]\n", DEFAULT_MAX_NUM_BUFFERS);
 	fprintf(stderr, "\t[-d device index (default: 0)]\n");
-	fprintf(stderr, "\t[-P ppm_error (default: 0)]\n");
 	exit(1);
 }
 
@@ -291,25 +289,6 @@ static void *command_worker(void *arg)
 				pthread_exit(NULL);
 			}
 		}
-		switch(cmd.cmd) {
-		case 0x01:
-			break;
-		case 0x02:
-			fprintf(stderr, "set sample rate %d\n", ntohl(cmd.param));
-			hsdaoh_set_sample_rate(dev, ntohl(cmd.param), false);
-			break;
-		case 0x03:
-			fprintf(stderr, "set gain mode %d\n", ntohl(cmd.param));
-			//hsdaoh_set_tuner_gain_mode(dev, ntohl(cmd.param));
-			break;
-		case 0x04:
-			fprintf(stderr, "set gain %d\n", ntohl(cmd.param));
-		//	hsdaoh_set_tuner_gain(dev, ntohl(cmd.param));
-			break;
-		default:
-			break;
-		}
-		cmd.cmd = 0xff;
 	}
 }
 
@@ -318,7 +297,6 @@ int main(int argc, char **argv)
 	int r, opt, i;
 	char *addr = "127.0.0.1";
 	const char *port = DEFAULT_PORT_STR;
-	uint32_t frequency = 100000000, samp_rate = DEFAULT_SAMPLE_RATE_HZ;
 	struct sockaddr_storage local, remote;
 	struct addrinfo *ai;
 	struct addrinfo *aiHead;
@@ -330,7 +308,6 @@ int main(int argc, char **argv)
 	int aiErr;
 	uint32_t buf_num = 0;
 	int dev_index = 0;
-	int ppm_error = 0;
 	struct llist *curelem,*prev;
 	pthread_attr_t attr;
 	void *status;
@@ -349,13 +326,10 @@ int main(int argc, char **argv)
 	struct sigaction sigact, sigign;
 #endif
 
-	while ((opt = getopt(argc, argv, "a:p:s:v:b:n:d:e")) != -1) {
+	while ((opt = getopt(argc, argv, "a:p:b:n:d")) != -1) {
 		switch (opt) {
 		case 'd':
 			dev_index = (uint32_t)atoi(optarg);
-			break;
-		case 's':
-			samp_rate = (uint32_t)atof(optarg);
 			break;
 		case 'a':
 			addr = strdup(optarg);
@@ -400,11 +374,6 @@ int main(int argc, char **argv)
 #else
 	SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
-
-	/* Set the sample rate */
-	r = hsdaoh_set_sample_rate(dev, samp_rate, false);
-	if (r < 0)
-		fprintf(stderr, "WARNING: Failed to set sample rate.\n");
 
 	pthread_mutex_init(&exit_cond_lock, NULL);
 	pthread_mutex_init(&ll_mutex, NULL);
