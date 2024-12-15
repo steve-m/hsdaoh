@@ -81,7 +81,7 @@ struct hsdaoh_dev {
 
 	/* status */
 	int dev_lost;
-	int driver_active;
+	bool driver_active;
 	unsigned int xfer_errors;
 	char manufact[256];
 	char product[256];
@@ -368,6 +368,7 @@ int hsdaoh_clear_endpoint_halt(hsdaoh_dev_t *dev)
 	int r;
 
 	if (libusb_kernel_driver_active(dev->devh, 1) == 1) {
+		dev->driver_active = true;
 		r = libusb_detach_kernel_driver(dev->devh, 1);
 		if (r < 0) {
 			fprintf(stderr, "Failed to detach UVC Kernel driver: %d\n", r);
@@ -443,12 +444,6 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 		return -1;
 	}
 
-#if LIBUSB_API_VERSION >= 0x01000106
-	libusb_set_option(dev->ctx, LIBUSB_OPTION_LOG_LEVEL, 3);
-#else
-	libusb_set_debug(dev->ctx, 3);
-#endif
-
 	dev->dev_lost = 1;
 
 	cnt = libusb_get_device_list(dev->ctx, &list);
@@ -495,7 +490,7 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 
 	dev->hid_interface = 4;
 	if (libusb_kernel_driver_active(dev->devh, dev->hid_interface) == 1) {
-
+		dev->driver_active = true;
 		r = libusb_detach_kernel_driver(dev->devh, dev->hid_interface);
 		if (r < 0) {
 			fprintf(stderr, "Failed to detach HID Kernel driver: %d\n", r);
@@ -535,11 +530,10 @@ int hsdaoh_close(hsdaoh_dev_t *dev)
 
 	libusb_release_interface(dev->devh, dev->hid_interface);
 
-	//TODO: only re-attach kernel driver if it was attached previously
-	if (!libusb_attach_kernel_driver(dev->devh, 4))
-			fprintf(stderr, "Reattached kernel driver\n");
-	else
+	if (dev->driver_active) {
+		if (libusb_attach_kernel_driver(dev->devh, 1) && libusb_attach_kernel_driver(dev->devh, 4))
 			fprintf(stderr, "Reattaching kernel driver failed!\n");
+	}
 
 	uvc_close(dev->uvc_devh);
 	uvc_unref_device(dev->uvc_dev);
