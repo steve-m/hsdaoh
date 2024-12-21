@@ -591,7 +591,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	if (meta.framecounter != ((dev->last_frame_cnt + 1) & 0xffff)) {
 		dev->in_order_cnt = 0;
 		if (dev->stream_synced)
-			printf("Missed at least one frame, fcnt %d, expected %d!\n",
+			fprintf(stderr, "Missed at least one frame, fcnt %d, expected %d!\n",
 				meta.framecounter, ((dev->last_frame_cnt + 1) & 0xffff));
 	} else
 		dev->in_order_cnt++;
