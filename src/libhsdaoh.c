@@ -73,7 +73,7 @@ struct hsdaoh_dev {
 	int discard_start_frames;
 	unsigned int in_order_cnt;
 	uint16_t last_frame_cnt;
-	uint16_t last_crc;
+	uint16_t last_crc[2];
 	uint16_t idle_cnt;
 	bool stream_synced;
 
@@ -100,8 +100,9 @@ static hsdaoh_adapter_t known_devices[] = {
 };
 
 enum crc_config {
-	CRC_NONE,
-	CRC16_PREV_LINE,
+	CRC_NONE,		/* No CRC, just 16 bit idle counter */
+	CRC16_1_LINE,		/* Line contains CRC of the last line */
+	CRC16_2_LINE		/* Line contains CRC of the line before the last line */
 };
 
 typedef struct
@@ -601,7 +602,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	int frame_errors = 0;
 
 	for (unsigned int i = 0; i < dev->height; i++) {
-		uint8_t *line_dat = data + (dev->width * 2 * i);
+		uint8_t *line_dat = data + (dev->width * sizeof(uint16_t) * i);
 
 		/* extract number of payload words from reserved field at end of line */
 		uint16_t payload_len = le16toh(((uint16_t *)line_dat)[dev->width - 1]);
@@ -621,17 +622,20 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		if (meta.crc_config == CRC_NONE) {
 			uint16_t idle_len = (dev->width-1) - payload_len;
 			frame_errors += hsdaoh_check_idle_cnt(dev, (uint16_t *)line_dat + payload_len, idle_len);
-		} else if (meta.crc_config == CRC16_PREV_LINE) {
-			if ((crc != dev->last_crc) && dev->stream_synced)
+		} else if ((meta.crc_config == CRC16_1_LINE) || (meta.crc_config == CRC16_2_LINE)) {
+			uint16_t expected_crc = (meta.crc_config == CRC16_1_LINE) ? dev->last_crc[0] : dev->last_crc[1];
+
+			if ((crc != expected_crc) && dev->stream_synced)
 				frame_errors++;
 
-			dev->last_crc = crc16_ccitt(line_dat, dev->width * 2);
+			dev->last_crc[1] = dev->last_crc[0];
+			dev->last_crc[0] = crc16_ccitt(line_dat, dev->width * sizeof(uint16_t));
 		}
 
 		if (payload_len > 0)
 			memmove(data + frame_payload_bytes, line_dat, payload_len * sizeof(uint16_t));
 
-		frame_payload_bytes += payload_len*2;
+		frame_payload_bytes += payload_len * sizeof(uint16_t);
 	}
 
 	if (dev->cb && dev->stream_synced)
