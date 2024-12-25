@@ -714,11 +714,8 @@ int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx)
 		dev->discard_start_frames = 30;
 		res = uvc_start_streaming(dev->uvc_devh, &ctrl, _uvc_callback, (void *)dev, 0);
 
-		if (res < 0) {
+		if (res < 0)
 			uvc_perror(res, "start_streaming"); /* unable to start stream */
-		} else {
-			puts("Streaming...");
-		}
 	}
 
 	return r;
@@ -736,7 +733,6 @@ int hsdaoh_stop_stream(hsdaoh_dev_t *dev)
 
 		/* End the stream. Blocks until last callback is serviced */
 		uvc_stop_streaming(dev->uvc_devh);
-		puts("Done streaming.");
 
 		return 0;
 	}
