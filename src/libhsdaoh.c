@@ -636,14 +636,9 @@ void hsdaoh_unpack_12bit(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
 
 void hsdaoh_unpack_audio_samples(hsdaoh_dev_t *dev, uint32_t *buf, size_t length)
 {
-	for (unsigned int i = 0; i < length; i++) {
-		/* sign extension */
-		if (buf[i] & (1 << 23))
-			buf[i] |= 0xff000000;
-		else
-			buf[i] &= 0x00ffffff;
-
-	}
+	/* convert from S24LE to S32LE */
+	for (unsigned int i = 0; i < length; i++)
+		buf[i] <<= 8;
 
 	hsdaoh_data_info_t data_info;
 	data_info.stream_id = 1;
