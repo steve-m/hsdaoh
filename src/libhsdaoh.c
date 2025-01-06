@@ -650,6 +650,48 @@ void hsdaoh_unpack_audio_samples(hsdaoh_dev_t *dev, uint32_t *buf, size_t length
 		dev->cb(&data_info);
 }
 
+int hsdaoh_unpack_24bit_fpga(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
+{
+	unsigned int i, j = 0;
+	uint16_t *samps1 = malloc(sizeof(uint16_t) * length * 2);
+	uint16_t *samps2 = malloc(sizeof(uint16_t) * length * 2);
+
+	if (!samps1 || !samps2)
+		return -ENOMEM;
+
+	/* extract packed 2x12 bit samples */
+	for (i = 0; i < length; i += 3) {
+		uint16_t lsbs = buf[i+2];
+		samps1[j]   = ((buf[i+0] & 0xff00) >> 4) | ((lsbs >>  0) & 0xf);
+		samps2[j++] = ((buf[i+0] & 0x00ff) << 4) | ((lsbs >>  4) & 0xf);
+		samps1[j]   = ((buf[i+1] & 0xff00) >> 4) | ((lsbs >>  8) & 0xf);
+		samps2[j++] = ((buf[i+1] & 0x00ff) << 4) | ((lsbs >> 12) & 0xf);
+	}
+
+#ifdef OUTPUT_FLOAT
+	hsdaoh_handle_payload_16bit(dev, samps2, j);
+#else
+	hsdaoh_data_info_t data_info;
+	data_info.stream_id = 0;
+	data_info.buf = (uint8_t *)samps1;
+	data_info.len = j * sizeof(uint16_t);
+	data_info.ctx = dev->cb_ctx;
+	if (dev->cb)
+		dev->cb(&data_info);
+
+	data_info.stream_id = 1;
+	data_info.buf = (uint8_t *)samps2;
+	if (dev->cb)
+		dev->cb(&data_info);
+
+#endif
+
+	free(samps1);
+	free(samps2);
+
+	return 0;
+}
+
 void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 {
 	uint32_t frame_payload_bytes = 0;
@@ -658,6 +700,9 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	hsdaoh_extract_metadata(data, &meta, dev->width);
 
 	if (le32toh(meta.magic) != 0xda7acab1) {
+		if (dev->stream_synced)
+			fprintf(stderr, "Lost sync to HDMI input stream\n");
+
 		dev->stream_synced = false;
 		return;
 	}
@@ -683,7 +728,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		/* extract number of payload words from reserved field at end of line */
 		uint16_t payload_len = le16toh(((uint16_t *)line_dat)[dev->width - 1]);
 		uint16_t crc = le16toh(((uint16_t *)line_dat)[dev->width - 2]);
-		uint16_t stream_id = le16toh(((uint16_t *)line_dat)[dev->width - 3]);
+		uint16_t stream_id = 0;//le16toh(((uint16_t *)line_dat)[dev->width - 3]);
 
 		/* we only use 12 bits, the upper 4 bits are reserved for the metadata */
 		payload_len &= 0x0fff;
@@ -723,11 +768,8 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		}
 	}
 
-//	if (dev->cb && dev->stream_synced)
-//		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
-
 	if (dev->stream_synced)
-		hsdaoh_unpack_12bit(dev, (uint16_t *)data, frame_payload_bytes/sizeof(uint16_t));
+		hsdaoh_unpack_24bit_fpga(dev, (uint16_t *)data, frame_payload_bytes/sizeof(uint16_t));
 
 	if (frame_errors && dev->stream_synced) {
 		fprintf(stderr,"%d frame errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
