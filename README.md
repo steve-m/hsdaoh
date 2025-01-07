@@ -18,6 +18,7 @@ You need at least two pieces of hardware:
 ### HDMI Capture device based on MS2130 or MS2131
 There are many sources for those devices, ranging from Aliexpress to Amazon or maybe even your local hardware retailer, the price is typically around USD 10. Simply search for MS2130.
 Just make sure that it is marked as a real USB 3.0 device (most of them are marked as "U3" on the case), as cheaper sticks use the older MS2109 chip which is USB 2.0 only.
+Recently some fake sticks surfaced, for example being sold under the "Lemorele" brand - make sure to avoid these. Advertised as MS2130, they instead contained a USB 2.0 only AM8352 chip (VID/PID 1d1:f115).
 
 ### FPGA board with HDMI out
 The main target are currently the Tang Nano series of boards (4K, 9K and 20K). The Tang Primer boards as well as the EBAZ4205 also have been tested.
