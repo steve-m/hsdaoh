@@ -581,6 +581,9 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	hsdaoh_extract_metadata(data, &meta, dev->width);
 
 	if (le32toh(meta.magic) != 0xda7acab1) {
+		if (dev->stream_synced)
+			fprintf(stderr, "Lost sync to HDMI input stream\n");
+
 		dev->stream_synced = false;
 		return;
 	}
