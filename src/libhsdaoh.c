@@ -634,6 +634,50 @@ void hsdaoh_unpack_12bit(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
 	free(out);
 }
 
+void hsdaoh_unpack_24bit(hsdaoh_dev_t *dev, uint32_t *buf, size_t length)
+{
+	unsigned int i;
+
+	// We receive three 32-bit words containing four 24-bit samples (sample A - D)
+	// First word:  A23 A22 A21 A20 A19 A18 A17 A16 A15 A14 A13 A12 A11 A10 A09 A08 A07 A06 A05 A04 A03 A02 A01 A00 B07 B06 B05 B04 B03 B02 B01 B00
+	// Second word: B23 B22 B21 B20 B19 B18 B17 B16 B15 B14 B13 B12 B11 B10 B09 B08 C15 C14 C13 C12 C11 C10 C09 C08 C07 C06 C05 C04 C03 C02 C01 C00
+	// Third word:  D23 D22 D21 D20 D19 D18 D17 D16 D15 D14 D13 D12 D11 D10 D09 D08 D07 D06 D05 D04 D03 D02 D01 D00 C23 C22 C21 C20 C19 C18 C17 C16
+
+	uint32_t *out = malloc(sizeof(uint32_t) * dev->width * dev->height  * 2);
+	uint16_t *out16 = malloc(sizeof(uint16_t) * dev->width * dev->height  * 2);
+
+	unsigned int j = 0;
+
+	for (i = 0; i < length; i += 3) {
+		out[j++] = buf[i] >> 8;						// Sample A
+		out[j++] = ((buf[i+1] & 0xffff0000) >> 8) | (buf[i] & 0x000000ff);	// Sample B
+		out[j++] = ((buf[i+2] & 0x000000ff) << 16) | (buf[i+1] & 0x0000ffff);	// Sample C
+		out[j++] = buf[i+2] >> 8;					// Sample D
+	}
+
+	for (i = 0; i < j; i++) {
+		out16[i] = (out[i] >> 12) & 0x0fff;
+	//	out16[i] = out[i] & 0x0fff)
+	}
+
+
+#ifdef OUTPUT_FLOAT
+	hsdaoh_handle_payload_16bit(dev, out2, i);
+#else
+	hsdaoh_data_info_t data_info;
+	data_info.stream_id = 0;
+	data_info.buf = (uint8_t *)out16;
+	data_info.len = i * sizeof(uint16_t);
+	data_info.ctx = dev->cb_ctx;
+
+	if (dev->cb)
+		dev->cb(&data_info);
+#endif
+
+	free(out);
+	free(out16);
+}
+
 void hsdaoh_unpack_audio_samples(hsdaoh_dev_t *dev, uint32_t *buf, size_t length)
 {
 	/* convert from S24LE to S32LE */
@@ -726,11 +770,8 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		}
 	}
 
-//	if (dev->cb && dev->stream_synced)
-//		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
-
 	if (dev->stream_synced)
-		hsdaoh_unpack_12bit(dev, (uint16_t *)data, frame_payload_bytes/sizeof(uint16_t));
+		hsdaoh_unpack_24bit(dev, (uint32_t *)data, frame_payload_bytes/sizeof(uint32_t));
 
 	if (frame_errors && dev->stream_synced) {
 		fprintf(stderr,"%d frame errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
