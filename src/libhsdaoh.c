@@ -601,7 +601,6 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		dev->in_order_cnt++;
 
 	dev->last_frame_cnt = meta.framecounter;
-
 	int frame_errors = 0;
 
 	for (unsigned int i = 0; i < dev->height; i++) {
@@ -610,6 +609,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		/* extract number of payload words from reserved field at end of line */
 		uint16_t payload_len = le16toh(((uint16_t *)line_dat)[dev->width - 1]);
 		uint16_t crc = le16toh(((uint16_t *)line_dat)[dev->width - 2]);
+		uint16_t stream_id = le16toh(((uint16_t *)line_dat)[dev->width - 3]);
 
 		/* we only use 12 bits, the upper 4 bits are reserved for the metadata */
 		payload_len &= 0x0fff;
@@ -641,8 +641,14 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		frame_payload_bytes += payload_len * sizeof(uint16_t);
 	}
 
+	hsdaoh_data_info_t data_info;
+	data_info.stream_id = 0;
+	data_info.buf = (uint8_t *)data;
+	data_info.len = frame_payload_bytes;
+	data_info.ctx = dev->cb_ctx;
+
 	if (dev->cb && dev->stream_synced)
-		dev->cb(data, frame_payload_bytes, dev->cb_ctx);
+		dev->cb(&data_info);
 
 	if (frame_errors && dev->stream_synced) {
 		fprintf(stderr,"%d frame errors, %d frames since last error\n", frame_errors, dev->frames_since_error);

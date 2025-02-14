@@ -34,6 +34,14 @@ extern "C" {
 #include <stdbool.h>
 #include <hsdaoh_export.h>
 
+typedef struct hsdaoh_data_info {
+	void *ctx;
+	unsigned char *buf;
+	uint32_t len;			/* buffer length */
+	uint16_t stream_id;
+	bool device_error;		/* device error happened, terminate application */
+} hsdaoh_data_info_t;
+
 typedef struct hsdaoh_dev hsdaoh_dev_t;
 
 HSDAOH_API uint32_t hsdaoh_get_device_count(void);
@@ -89,7 +97,7 @@ HSDAOH_API int hsdaoh_get_usb_strings(hsdaoh_dev_t *dev, char *manufact,
 
 /* streaming functions */
 
-typedef void(*hsdaoh_read_cb_t)(unsigned char *buf, uint32_t len, void *ctx);
+typedef void(*hsdaoh_read_cb_t)(hsdaoh_data_info_t *data_info);
 
 /*!
  * Start streaming data from the device.
