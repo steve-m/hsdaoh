@@ -1,0 +1,94 @@
+#ifndef __HSDAOH_PRIVATE_H
+#define __HSDAOH_PRIVATE_H
+
+enum hsdaoh_async_status {
+	HSDAOH_INACTIVE = 0,
+	HSDAOH_CANCELING,
+	HSDAOH_RUNNING
+};
+
+struct hsdaoh_dev {
+	libusb_context *ctx;
+	struct libusb_device_handle *devh;
+	hsdaoh_read_cb_t cb;
+	void *cb_ctx;
+	enum hsdaoh_async_status async_status;
+	int async_cancel;
+	uint16_t vid;
+	uint16_t pid;
+
+	/* UVC related */
+	uvc_context_t *uvc_ctx;
+	uvc_device_t *uvc_dev;
+	uvc_device_handle_t *uvc_devh;
+
+	int hid_interface;
+
+	uint8_t edid_seq_cnt;
+	int frames_since_error;
+	int discard_start_frames;
+	unsigned int in_order_cnt;
+	uint16_t last_frame_cnt;
+	uint16_t last_crc[2];
+	uint16_t idle_cnt;
+	bool stream_synced;
+
+	unsigned int width, height, fps;
+
+	bool output_float;
+
+	/* status */
+	int dev_lost;
+	bool driver_active;
+	unsigned int xfer_errors;
+	char manufact[256];
+	char product[256];
+};
+
+enum
+{
+	RAW_8BIT,
+	RAW_16BIT,
+	RAW_24BIT,
+	RAW_32BIT,
+	RAW_64BIT,
+	PIO_1BIT,
+	PIO_2BIT,
+	PIO_3BIT,
+	PIO_4BIT,
+	PIO_5BIT,
+	PIO_6BIT,
+	PIO_7BIT,
+	PIO_8BIT,
+	PIO_8BIT_DUAL,
+	PIO_8BIT_IQ,
+	PIO_9BIT,
+	PIO_10BIT,
+	PIO_10BIT_DUAL,
+	PIO_10BIT_IQ,
+	PIO_11BIT,
+	PIO_12BIT,
+	PIO_12BIT_DUAL,
+	PIO_12BIT_IQ,
+	PIO_13BIT,
+	PIO_14BIT,
+	PIO_14BIT_DUAL,
+	PIO_14BIT_IQ,
+	PIO_15BIT,
+	PIO_16BIT,
+	PIO_16BIT_DUAL,
+	PIO_16BIT_IQ,
+	PIO_17BIT,
+	PIO_18BIT,
+	PIO_19BIT,
+	PIO_20BIT,
+	PIO_24BIT,
+	PIO_24BIT_IQ,
+	PIO_28BIT,
+	PIO_32BIT,
+	PIO_32BIT_IQ,
+	PIO_PCM1802_AUDIO,
+	// Placeholder for internal ADC data from pico
+};
+
+#endif

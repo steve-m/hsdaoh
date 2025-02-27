@@ -228,6 +228,9 @@ static void hsdaoh_callback(hsdaoh_data_info_t *data_info)
 	uint32_t len = data_info->len;
 	void *ctx = data_info->ctx;
 
+	if (data_info->stream_id != 0)
+		return;
+
 	/* verify the counter value */
 	uint16_t *cnt = (uint16_t *)buf;
 	int n = len / sizeof(uint16_t);

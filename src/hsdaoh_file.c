@@ -37,9 +37,15 @@
 
 #include "hsdaoh.h"
 
+#define FD_NUMS				4
+
 static int do_exit = 0;
 static uint32_t bytes_to_read = 0;
 static hsdaoh_dev_t *dev = NULL;
+
+typedef struct file_ctx {
+	FILE *files[FD_NUMS];
+} file_ctx_t;
 
 void usage(void)
 {
@@ -49,7 +55,8 @@ void usage(void)
 		"\t[-d device_index (default: 0)]\n"
 		"\t[-p ppm_error (default: 0)]\n"
 		"\t[-n number of samples to read (default: 0, infinite)]\n"
-		"\tfilename (a '-' dumps samples to stdout)\n\n");
+		"\t[-0 to -3 filename of steam 0 to stream 3 (a '-' dumps samples to stdout)]\n"
+		"\tfilename (of stream 0) (a '-' dumps samples to stdout)\n\n");
 	exit(1);
 }
 
@@ -75,37 +82,41 @@ static void sighandler(int signum)
 }
 #endif
 
-void hsdaoh_callback(hsdaoh_data_info_t *data_info)
+static void hsdaoh_callback(hsdaoh_data_info_t *data_info)
 {
-	unsigned char *buf = data_info->buf;
-	uint32_t len = data_info->len;
-	void *ctx = data_info->ctx;
 	size_t nbytes = 0;
+	uint32_t len = data_info->len;
 
-	if (ctx) {
-		if (do_exit)
-			return;
+	if (!data_info->ctx || do_exit)
+		return;
 
-		if ((bytes_to_read > 0) && (bytes_to_read < len)) {
-			len = bytes_to_read;
-			do_exit = 1;
-			hsdaoh_stop_stream(dev);
-		}
+	if (data_info->stream_id >= FD_NUMS)
+		return;
 
-		while (nbytes < len) {
-			nbytes += fwrite(buf + nbytes, 1, len - nbytes, (FILE*)ctx);
+	file_ctx_t *f = (file_ctx_t *)data_info->ctx;
+	FILE *file = f->files[data_info->stream_id];
 
-			if (ferror((FILE*)ctx)) {
-				fprintf(stderr, "Error writing file, samples lost, exiting!\n");
-				hsdaoh_stop_stream(dev);
-				break;
-			}
+	if (!file)
+		return;
 
-		}
-
-		if (bytes_to_read > 0)
-			bytes_to_read -= len;
+	if ((bytes_to_read > 0) && (bytes_to_read < len)) {
+		len = bytes_to_read;
+		do_exit = 1;
+		hsdaoh_stop_stream(dev);
 	}
+
+	while (nbytes < len) {
+		nbytes += fwrite(data_info->buf + nbytes, 1, len - nbytes, file);
+
+		if (ferror(file)) {
+			fprintf(stderr, "Error writing file, samples lost, exiting!\n");
+			hsdaoh_stop_stream(dev);
+			break;
+		}
+	}
+
+	if (bytes_to_read > 0)
+		bytes_to_read -= len;
 }
 
 int main(int argc, char **argv)
@@ -113,14 +124,16 @@ int main(int argc, char **argv)
 #ifndef _WIN32
 	struct sigaction sigact;
 #endif
-	char *filename = NULL;
+	char *filenames[FD_NUMS] = { NULL, };
 	int n_read;
 	int r, opt;
 	int ppm_error = 0;
-	FILE *file;
+	file_ctx_t f;
 	int dev_index = 0;
+	bool fname0_used = false;
+	bool have_file = false;
 
-	while ((opt = getopt(argc, argv, "d:n:p:d:")) != -1) {
+	while ((opt = getopt(argc, argv, "0:1:2:3:d:n:p:d:a:")) != -1) {
 		switch (opt) {
 		case 'd':
 			dev_index = (uint32_t)atoi(optarg);
@@ -131,21 +144,40 @@ int main(int argc, char **argv)
 		case 'n':
 			bytes_to_read = (uint32_t)atof(optarg) * 2;
 			break;
+		case '0':
+			fname0_used = true;
+			have_file = true;
+			filenames[0] = optarg;
+			break;
+		case '1':
+			have_file = true;
+			filenames[1] = optarg;
+			break;
+		case '2':
+			have_file = true;
+			filenames[2] = optarg;
+			break;
+		case '3':
+			have_file = true;
+			filenames[3] = optarg;
+			break;
 		default:
 			usage();
 			break;
 		}
 	}
 
-	if (argc <= optind) {
-		usage();
-	} else {
-		filename = argv[optind];
+	if (!fname0_used) {
+		if (argc <= optind) {
+			if (!have_file)
+				usage();
+		} else {
+			filenames[0] = argv[optind];
+		}
 	}
 
-	if (dev_index < 0) {
+	if (dev_index < 0)
 		exit(1);
-	}
 
 	r = hsdaoh_open(&dev, (uint32_t)dev_index);
 	if (r < 0) {
@@ -164,21 +196,28 @@ int main(int argc, char **argv)
 	SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
 
-	if (strcmp(filename, "-") == 0) { /* Write samples to stdout */
-		file = stdout;
+	for (int i = 0; i < FD_NUMS; i++) {
+		f.files[i] = NULL;
+
+		if (!filenames[i])
+			continue;
+
+		if (strcmp(filenames[i], "-") == 0) { /* Write samples to stdout */
+			f.files[i] = stdout;
 #ifdef _WIN32
-		_setmode(_fileno(stdin), _O_BINARY);
+			_setmode(_fileno(stdin), _O_BINARY);
 #endif
-	} else {
-		file = fopen(filename, "wb");
-		if (!file) {
-			fprintf(stderr, "Failed to open %s\n", filename);
-			goto out;
+		} else {
+			f.files[i] = fopen(filenames[i], "wb");
+			if (!f.files[i]) {
+				fprintf(stderr, "Failed to open %s\n", filenames[i]);
+				goto out;
+			}
 		}
 	}
 
 	fprintf(stderr, "Reading samples...\n");
-	r = hsdaoh_start_stream(dev, hsdaoh_callback, (void *)file);
+	r = hsdaoh_start_stream(dev, hsdaoh_callback, (void *)&f);
 
 	while (!do_exit) {
 		usleep(50000);
@@ -189,10 +228,13 @@ int main(int argc, char **argv)
 	else
 		fprintf(stderr, "\nLibrary error %d, exiting...\n", r);
 
-	if (file != stdout)
-		fclose(file);
-
 	hsdaoh_close(dev);
+
+	for (int i = 0; i < FD_NUMS; i++) {
+		if (f.files[i] && (f.files[i] != stdout))
+			fclose(f.files[i]);
+	}
+
 out:
 	return r >= 0 ? r : -r;
 }
