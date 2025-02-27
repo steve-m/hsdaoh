@@ -18,7 +18,7 @@
 ########################################################################
 # Setup shared library variant
 ########################################################################
-add_library(hsdaoh SHARED libhsdaoh.c)
+add_library(hsdaoh SHARED libhsdaoh.c format_convert.c)
 target_link_libraries(hsdaoh ${LIBUSB_LIBRARIES} ${LIBUVC_LIBRARIES} ${THREADS_PTHREADS_LIBRARY})
 target_include_directories(hsdaoh PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
@@ -36,7 +36,7 @@ generate_export_header(hsdaoh)
 ########################################################################
 # Setup static library variant
 ########################################################################
-add_library(hsdaoh_static STATIC libhsdaoh.c)
+add_library(hsdaoh_static STATIC libhsdaoh.c format_convert.c)
 target_link_libraries(hsdaoh m ${LIBUSB_LIBRARIES} ${LIBUVC_LIBRARIES} ${THREADS_PTHREADS_LIBRARY})
 target_include_directories(hsdaoh_static PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>

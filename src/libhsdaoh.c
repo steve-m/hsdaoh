@@ -42,50 +42,11 @@
 #include <inttypes.h>
 #include <libusb.h>
 #include <libuvc/libuvc.h>
+
 #include <hsdaoh.h>
+#include <hsdaoh_private.h>
+#include <format_convert.h>
 #include <crc.h>
-
-enum hsdaoh_async_status {
-	HSDAOH_INACTIVE = 0,
-	HSDAOH_CANCELING,
-	HSDAOH_RUNNING
-};
-
-struct hsdaoh_dev {
-	libusb_context *ctx;
-	struct libusb_device_handle *devh;
-	hsdaoh_read_cb_t cb;
-	void *cb_ctx;
-	enum hsdaoh_async_status async_status;
-	int async_cancel;
-	uint16_t vid;
-	uint16_t pid;
-
-	/* UVC related */
-	uvc_context_t *uvc_ctx;
-	uvc_device_t *uvc_dev;
-	uvc_device_handle_t *uvc_devh;
-
-	int hid_interface;
-
-	uint8_t edid_seq_cnt;
-	int frames_since_error;
-	int discard_start_frames;
-	unsigned int in_order_cnt;
-	uint16_t last_frame_cnt;
-	uint16_t last_crc[2];
-	uint16_t idle_cnt;
-	bool stream_synced;
-
-	unsigned int width, height, fps;
-
-	/* status */
-	int dev_lost;
-	bool driver_active;
-	unsigned int xfer_errors;
-	char manufact[256];
-	char product[256];
-};
 
 typedef struct hsdaoh_adapter {
 	uint16_t vid;
@@ -95,7 +56,7 @@ typedef struct hsdaoh_adapter {
 
 static hsdaoh_adapter_t known_devices[] = {
 	{ 0x345f, 0x2130, "MS2130" },
-	{ 0x534d, 0x2130, "MS2130 OEM?" },
+	{ 0x534d, 0x2130, "MS2130 OEM" },
 	{ 0x345f, 0x2131, "MS2131" },
 };
 
@@ -109,11 +70,14 @@ typedef struct
 {
 	uint32_t magic;
 	uint16_t framecounter;
-	uint8_t  pack_state;
+	uint8_t  reserved1;
 	uint8_t  crc_config;
-	uint8_t  data_width;
-	uint8_t  data_signedness;
+	uint16_t version;
+	uint32_t flags;
 } __attribute__((packed, aligned(1))) metadata_t;
+
+#define FLAG_STREAM_ID_PRESENT	(1 << 0)
+#define FLAG_FORMAT_ID_PRESENT	(1 << 1)
 
 #define CTRL_TIMEOUT	300
 
@@ -573,6 +537,30 @@ inline void hsdaoh_extract_metadata(uint8_t *data, metadata_t *metadata, unsigne
 		meta[j++] = (data[((i+1)*width*2) - 1] >> 4) | (data[((i+2)*width*2) - 1] & 0xf0);
 }
 
+void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint8_t *data, size_t len)
+{
+	hsdaoh_data_info_t data_info;
+	data_info.ctx = dev->cb_ctx;
+	data_info.stream_id = sid;
+	data_info.buf = data;
+	data_info.len = len;
+
+	switch (format) {
+		case PIO_12BIT:
+			hsdaoh_unpack_pio_12bit(dev, &data_info);
+			break;
+		case PIO_12BIT_DUAL:
+			hsdaoh_unpack_pio_12bit_dual(dev, &data_info);
+			break;
+		case PIO_PCM1802_AUDIO:
+			hsdaoh_unpack_pio_pcm1802_audio(dev, &data_info);
+			break;
+		default:
+			dev->cb(&data_info);
+			break;
+	}
+}
+
 void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 {
 	uint32_t frame_payload_bytes = 0;
@@ -602,6 +590,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 
 	dev->last_frame_cnt = meta.framecounter;
 	int frame_errors = 0;
+	uint16_t stream0_format = 0;
 
 	for (unsigned int i = 0; i < dev->height; i++) {
 		uint8_t *line_dat = data + (dev->width * sizeof(uint16_t) * i);
@@ -610,6 +599,12 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		uint16_t payload_len = le16toh(((uint16_t *)line_dat)[dev->width - 1]);
 		uint16_t crc = le16toh(((uint16_t *)line_dat)[dev->width - 2]);
 		uint16_t stream_id = le16toh(((uint16_t *)line_dat)[dev->width - 3]);
+		uint16_t format = (meta.flags & FLAG_FORMAT_ID_PRESENT) ? stream_id >> 6 : RAW_8BIT;
+
+		if (meta.flags & FLAG_STREAM_ID_PRESENT)
+			stream_id &= 0x3f;
+		else
+			stream_id = 0;
 
 		/* we only use 12 bits, the upper 4 bits are reserved for the metadata */
 		payload_len &= 0x0fff;
@@ -635,20 +630,19 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 			dev->last_crc[0] = crc16_ccitt(line_dat, dev->width * sizeof(uint16_t));
 		}
 
-		if (payload_len > 0)
-			memmove(data + frame_payload_bytes, line_dat, payload_len * sizeof(uint16_t));
-
-		frame_payload_bytes += payload_len * sizeof(uint16_t);
+		if ((payload_len > 0) && dev->stream_synced) {
+			if (!(meta.flags & FLAG_STREAM_ID_PRESENT) || stream_id == 0) {
+				memmove(data + frame_payload_bytes, line_dat, payload_len * sizeof(uint16_t));
+				frame_payload_bytes += payload_len * sizeof(uint16_t);
+				stream0_format = format;
+			} else {
+				hsdaoh_output(dev, stream_id, format, line_dat, payload_len * sizeof(uint16_t));
+			}
+		}
 	}
 
-	hsdaoh_data_info_t data_info;
-	data_info.stream_id = 0;
-	data_info.buf = (uint8_t *)data;
-	data_info.len = frame_payload_bytes;
-	data_info.ctx = dev->cb_ctx;
-
-	if (dev->cb && dev->stream_synced)
-		dev->cb(&data_info);
+	if (dev->stream_synced && frame_payload_bytes)
+		hsdaoh_output(dev, 0, stream0_format, data, frame_payload_bytes);
 
 	if (frame_errors && dev->stream_synced) {
 		fprintf(stderr,"%d frame errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
@@ -702,6 +696,8 @@ int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx)
 
 	dev->cb = cb;
 	dev->cb_ctx = ctx;
+
+//	dev->output_float = true;
 
 	uvc_error_t res;
 	uvc_stream_ctrl_t ctrl;

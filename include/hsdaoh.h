@@ -34,15 +34,24 @@ extern "C" {
 #include <stdbool.h>
 #include <hsdaoh_export.h>
 
+#define HSDAOH_MAX_BUF_SIZE	(1920 * 1080 * 2)
+
 typedef struct hsdaoh_data_info {
 	void *ctx;
 	unsigned char *buf;
-	uint32_t len;			/* buffer length */
+	size_t len;			/* buffer length */
 	uint16_t stream_id;
 	bool device_error;		/* device error happened, terminate application */
 } hsdaoh_data_info_t;
 
 typedef struct hsdaoh_dev hsdaoh_dev_t;
+
+typedef enum
+{
+	OUT_FMT_RAW,
+	OUT_FMT_UNPACKED,
+	OUT_FMT_FLOAT
+} hsdaoh_output_format_t;
 
 HSDAOH_API uint32_t hsdaoh_get_device_count(void);
 
