@@ -30,7 +30,7 @@
 #include <hsdaoh_private.h>
 #include <format_convert.h>
 
-static inline void hsdaoh_16bit_to_float(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info, uint16_t *buf, size_t length, float scale)
+static inline void hsdaoh_16bit_to_float(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info, uint16_t *buf, size_t length, float scale, bool duplicate)
 {
 	unsigned int i, j = 0;
 
@@ -42,7 +42,9 @@ static inline void hsdaoh_16bit_to_float(hsdaoh_dev_t *dev, hsdaoh_data_info_t *
 	for (unsigned int i = 0; i < length; i++) {
 		float sample_i = buf[i];
 		floats[j++] = (sample_i - scale) * (1/scale);
-		floats[j++] = (sample_i - scale) * (1/scale);
+
+		if (duplicate)
+			floats[j++] = (sample_i - scale) * (1/scale);
 	}
 
 	data_info->buf = (uint8_t *)floats;
@@ -71,7 +73,7 @@ void hsdaoh_unpack_pio_12bit(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
 	}
 
 	if (dev->output_float) {
-		hsdaoh_16bit_to_float(dev, data_info, out, j, 2047.5);
+		hsdaoh_16bit_to_float(dev, data_info, out, j, 2047.5, true);
 	} else {
 		data_info->buf = (uint8_t *)out;
 		data_info->len = j * sizeof(uint16_t);
@@ -107,7 +109,7 @@ void hsdaoh_unpack_pio_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_in
 	}
 
 	if (dev->output_float) {
-		hsdaoh_16bit_to_float(dev, data_info, out16_1, i, 2047.5);
+		hsdaoh_16bit_to_float(dev, data_info, out16_1, i, 2047.5, true);
 	} else {
 		data_info->buf = (uint8_t *)out16_1;
 		data_info->len = i * sizeof(uint16_t);
@@ -118,7 +120,7 @@ void hsdaoh_unpack_pio_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_in
 	data_info->stream_id += 1;
 
 	if (dev->output_float) {
-		hsdaoh_16bit_to_float(dev, data_info, out16_2, i, 2047.5);
+		hsdaoh_16bit_to_float(dev, data_info, out16_2, i, 2047.5, true);
 	} else {
 		data_info->buf = (uint8_t *)out16_2;
 		data_info->len = i * sizeof(uint16_t);
@@ -129,6 +131,67 @@ void hsdaoh_unpack_pio_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_in
 	free(out);
 	free(out16_1);
 	free(out16_2);
+}
+
+// We receive five 16-bit words containing four 20-bit samples (sample A - D)
+// First word:  A15 A14 A13 A12 A11 A10 A09 A08 A07 A06 A05 A04 A03 A02 A01 A00
+// Second word: A19 A18 A17 A16 B11 B10 B09 B08 B07 B06 B05 B04 B03 B02 B01 B00
+// Third word:  B19 B18 B17 B16 B15 B14 B13 B12 C07 C06 C05 C04 C03 C02 C01 C00
+// Fourth word: C19 C18 C17 C16 C15 C14 C13 C12 C11 C10 C09 C08 D03 D02 D01 D00
+// Fifth word:  D19 D18 D17 D16 D15 D14 D13 D12 D11 D10 D09 D08 D07 D06 D05 D04
+void hsdaoh_unpack_pio_10bit_iq(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
+{
+	uint16_t *in = (uint16_t *)data_info->buf;
+	size_t inlen = data_info->len / sizeof(uint16_t);
+
+	uint32_t *out = malloc(sizeof(uint32_t) * dev->width * dev->height  * 2);
+	uint16_t *iq_samps = malloc(sizeof(uint16_t) * dev->width * dev->height * 2  * 2);
+	unsigned int i = 0;
+	unsigned int j = 0;
+
+	for (i = 0; i < inlen; i += 5) {
+		out[j++] = ((in[i+1] & 0xf000) << 4) | in[i];			// Sample A
+		out[j++] = ((in[i+2] & 0xff00) << 4) | (in[i+1] & 0x0fff);	// Sample B
+		out[j++] = ((in[i+3] & 0xfff0) << 4) | (in[i+2] & 0x00ff);	// Sample C
+		out[j++] =  (in[i+4] << 4)           | (in[i+3] & 0x000f);	// Sample D
+	}
+
+	unsigned int out_samps = 0;
+
+	// convert 20 bit words to interleaved 10 bit IQ samples
+	// the LSBs are stored at the top 4 bits of the 20 bit word, to easily allow
+	// switching to an 8 bit IQ mode with another PIO program
+	for (i = 0; i < j; i++) {
+		iq_samps[out_samps++] = ((out[i] & 0x000000ff) << 2) | ((out[i] >> 16) & 3);
+		iq_samps[out_samps++] = ((out[i] & 0x0000ff00) >> 6) | ((out[i] >> 18) & 3);
+	}
+
+	if (dev->output_float) {
+		hsdaoh_16bit_to_float(dev, data_info, iq_samps, out_samps, 511.5, false);
+	} else {
+		data_info->buf = (uint8_t *)iq_samps;
+		data_info->len = out_samps * sizeof(uint16_t);
+
+		dev->cb(data_info);
+	}
+
+	free(out);
+	free(iq_samps);
+}
+
+void hsdaoh_unpack_pio_pcm1802_audio(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
+{
+	uint32_t *in = (uint32_t *)data_info->buf;
+	size_t inlen = data_info->len / sizeof(uint32_t);
+
+	/* convert from S24LE to S32LE */
+	for (unsigned int i = 0; i < inlen; i++)
+		in[i] <<= 8;
+
+	data_info->buf = (uint8_t *)in;
+	data_info->len = inlen * sizeof(uint32_t);
+
+	dev->cb(data_info);
 }
 
 void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
@@ -152,7 +215,7 @@ void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_i
 	}
 
 	if (dev->output_float) {
-		hsdaoh_16bit_to_float(dev, data_info, out16_1, i, 2047.5);
+		hsdaoh_16bit_to_float(dev, data_info, out16_1, i, 2047.5, true);
 	} else {
 		data_info->buf = (uint8_t *)out16_1;
 		data_info->len = i * sizeof(uint16_t);
@@ -163,7 +226,7 @@ void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_i
 	data_info->stream_id += 1;
 
 	if (dev->output_float) {
-		hsdaoh_16bit_to_float(dev, data_info, out16_2, i, 2047.5);
+		hsdaoh_16bit_to_float(dev, data_info, out16_2, i, 2047.5, true);
 	} else {
 		data_info->buf = (uint8_t *)out16_2;
 		data_info->len = i * sizeof(uint16_t);
@@ -173,19 +236,4 @@ void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_i
 
 	free(out16_1);
 	free(out16_2);
-}
-
-void hsdaoh_unpack_pio_pcm1802_audio(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
-{
-	uint32_t *in = (uint32_t *)data_info->buf;
-	size_t inlen = data_info->len / sizeof(uint32_t);
-
-	/* convert from S24LE to S32LE */
-	for (unsigned int i = 0; i < inlen; i++)
-		in[i] <<= 8;
-
-	data_info->buf = (uint8_t *)in;
-	data_info->len = inlen * sizeof(uint32_t);
-
-	dev->cb(data_info);
 }
