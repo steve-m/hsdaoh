@@ -546,6 +546,9 @@ void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint8_t *data, s
 	data_info.len = len;
 
 	switch (format) {
+		case PIO_8BIT_IQ:
+			hsdaoh_unpack_pio_8bit_iq(dev, &data_info);
+			break;
 		case PIO_10BIT_IQ:
 			hsdaoh_unpack_pio_10bit_iq(dev, &data_info);
 			break;

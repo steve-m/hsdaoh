@@ -133,6 +133,33 @@ void hsdaoh_unpack_pio_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_in
 	free(out16_2);
 }
 
+// We receive the samples as 16 bit words containing 8 bit I, 8 bit Q
+void hsdaoh_unpack_pio_8bit_iq(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
+{
+	uint16_t *in = (uint16_t *)data_info->buf;
+	size_t inlen = data_info->len / sizeof(uint16_t);
+
+	uint16_t *iq_samps = malloc(sizeof(uint16_t) * dev->width * dev->height * 2  * 2);
+	unsigned int i = 0;
+	unsigned int out_samps = 0;
+
+	for (i = 0; i < inlen; i++) {
+		iq_samps[out_samps++] = in[i] & 0xff;
+		iq_samps[out_samps++] = in[i] >> 8;
+	}
+
+	if (dev->output_float) {
+		hsdaoh_16bit_to_float(dev, data_info, iq_samps, out_samps, 127.5, false);
+	} else {
+		data_info->buf = (uint8_t *)in;
+		data_info->len = inlen;
+
+		dev->cb(data_info);
+	}
+
+	free(iq_samps);
+}
+
 // We receive five 16-bit words containing four 20-bit samples (sample A - D)
 // First word:  A15 A14 A13 A12 A11 A10 A09 A08 A07 A06 A05 A04 A03 A02 A01 A00
 // Second word: A19 A18 A17 A16 B11 B10 B09 B08 B07 B06 B05 B04 B03 B02 B01 B00
