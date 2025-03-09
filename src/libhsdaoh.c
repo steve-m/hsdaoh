@@ -43,6 +43,9 @@
 #include <libusb.h>
 #include <libuvc/libuvc.h>
 
+#include <iqconverter_float.h>
+#include <filters.h>
+
 #include <hsdaoh.h>
 #include <hsdaoh_private.h>
 #include <format_convert.h>
@@ -473,6 +476,7 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 		goto err;
 
 	dev->dev_lost = 0;
+	dev->cnv_f = iqconverter_float_create(HB_KERNEL_FLOAT, HB_KERNEL_FLOAT_LEN);
 
 found:
 	*out_dev = dev;
@@ -504,7 +508,19 @@ int hsdaoh_close(hsdaoh_dev_t *dev)
 	uvc_unref_device(dev->uvc_dev);
 	uvc_exit(dev->uvc_ctx);
 
+	iqconverter_float_free(dev->cnv_f);
 	free(dev);
+
+	return 0;
+}
+
+// maybe rename to preferred output format
+// and add real output format to data_info_t
+int hsdaoh_set_output_format(hsdaoh_dev_t *dev, hsdaoh_output_format_t format)
+{
+	if (!dev)
+		return -1;
+
 
 	return 0;
 }
@@ -629,8 +645,10 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		} else if ((meta.crc_config == CRC16_1_LINE) || (meta.crc_config == CRC16_2_LINE)) {
 			uint16_t expected_crc = (meta.crc_config == CRC16_1_LINE) ? dev->last_crc[0] : dev->last_crc[1];
 
-			if ((crc != expected_crc) && dev->stream_synced)
+			if ((crc != expected_crc) && dev->stream_synced) {
 				frame_errors++;
+				fprintf(stderr, "Checksum mismatch in line %d: %04x != %04x\n", i, crc, expected_crc);
+			}
 
 			dev->last_crc[1] = dev->last_crc[0];
 			dev->last_crc[0] = crc16_ccitt(line_dat, dev->width * sizeof(uint16_t));
@@ -697,13 +715,15 @@ int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx)
 	if (HSDAOH_INACTIVE != dev->async_status)
 		return -2;
 
+	iqconverter_float_reset(dev->cnv_f);
+
 	dev->async_status = HSDAOH_RUNNING;
 	dev->async_cancel = 0;
 
 	dev->cb = cb;
 	dev->cb_ctx = ctx;
 
-//	dev->output_float = true;
+	dev->output_float = true;
 
 	uvc_error_t res;
 	uvc_stream_ctrl_t ctrl;
