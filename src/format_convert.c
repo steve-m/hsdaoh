@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <libusb.h>
 #include <libuvc/libuvc.h>
+#include <iqconverter_float.h>
 #include <hsdaoh.h>
 #include <hsdaoh_private.h>
 #include <format_convert.h>
@@ -46,6 +47,8 @@ static inline void hsdaoh_16bit_to_float(hsdaoh_dev_t *dev, hsdaoh_data_info_t *
 		if (duplicate)
 			floats[j++] = (sample_i - scale) * (1/scale);
 	}
+
+//	iqconverter_float_process(dev->cnv_f, (float *) floats, j);
 
 	data_info->buf = (uint8_t *)floats;
 	data_info->len = j * sizeof(float);

@@ -18,7 +18,7 @@
 ########################################################################
 # Setup shared library variant
 ########################################################################
-add_library(hsdaoh SHARED libhsdaoh.c format_convert.c)
+add_library(hsdaoh SHARED libhsdaoh.c format_convert.c iqconverter_float.c)
 target_link_libraries(hsdaoh ${LIBUSB_LIBRARIES} ${LIBUVC_LIBRARIES} ${THREADS_PTHREADS_LIBRARY})
 target_include_directories(hsdaoh PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
@@ -36,7 +36,7 @@ generate_export_header(hsdaoh)
 ########################################################################
 # Setup static library variant
 ########################################################################
-add_library(hsdaoh_static STATIC libhsdaoh.c format_convert.c)
+add_library(hsdaoh_static STATIC libhsdaoh.c format_convert.c iqconverter_float.c)
 target_link_libraries(hsdaoh m ${LIBUSB_LIBRARIES} ${LIBUVC_LIBRARIES} ${THREADS_PTHREADS_LIBRARY})
 target_include_directories(hsdaoh_static PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
@@ -46,6 +46,7 @@ target_include_directories(hsdaoh_static PUBLIC
   ${THREADS_PTHREADS_INCLUDE_DIR}
   )
 set_property(TARGET hsdaoh_static APPEND PROPERTY COMPILE_DEFINITIONS "hsdaoh_STATIC" )
+set_property(TARGET hsdaoh_static PROPERTY POSITION_INDEPENDENT_CODE ON)
 if(NOT WIN32)
 # Force same library filename for static and shared variants of the library
 set_target_properties(hsdaoh_static PROPERTIES OUTPUT_NAME hsdaoh)
