@@ -40,6 +40,7 @@
 #endif
 
 #include <inttypes.h>
+#include <pthread.h>
 #include <libusb.h>
 #include <libuvc/libuvc.h>
 
@@ -50,6 +51,8 @@
 #include <hsdaoh_private.h>
 #include <format_convert.h>
 #include <crc.h>
+
+#define DEFAULT_BUFFERS 16
 
 typedef struct hsdaoh_adapter {
 	uint16_t vid;
@@ -525,34 +528,6 @@ int hsdaoh_set_output_format(hsdaoh_dev_t *dev, hsdaoh_output_format_t format)
 	return 0;
 }
 
-/* callback for idle/filler data */
-inline int hsdaoh_check_idle_cnt(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
-{
-	int idle_counter_errors = 0;
-
-	if (length == 0)
-		return 0;
-
-	for (unsigned int i = 0; i < length; i++) {
-		if (buf[i] != ((dev->idle_cnt+1) & 0xffff))
-			idle_counter_errors++;
-
-		dev->idle_cnt = buf[i];
-	}
-
-	return idle_counter_errors;
-}
-
-/* Extract the metadata stored in the upper 4 bits of the last word of each line */
-inline void hsdaoh_extract_metadata(uint8_t *data, metadata_t *metadata, unsigned int width)
-{
-	int j = 0;
-	uint8_t *meta = (uint8_t *)metadata;
-
-	for (unsigned i = 0; i < sizeof(metadata_t)*2; i += 2)
-		meta[j++] = (data[((i+1)*width*2) - 1] >> 4) | (data[((i+2)*width*2) - 1] & 0xf0);
-}
-
 void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint8_t *data, size_t len)
 {
 	hsdaoh_data_info_t data_info;
@@ -583,10 +558,124 @@ void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint8_t *data, s
 	}
 }
 
+static void *hsdaoh_output_worker(void *arg)
+{
+	struct llist *curelem, *prev;
+	struct timespec ts;
+	struct timeval tp;
+	fd_set writefds;
+	int r = 0;
+	hsdaoh_dev_t *dev = (hsdaoh_dev_t *)arg;
+
+	while(1) {
+		if (dev->async_status != HSDAOH_RUNNING)
+			pthread_exit(NULL);
+
+		pthread_mutex_lock(&dev->ll_mutex);
+		gettimeofday(&tp, NULL);
+		ts.tv_sec  = tp.tv_sec+1;
+		ts.tv_nsec = tp.tv_usec * 1000;
+		r = pthread_cond_timedwait(&dev->cond, &dev->ll_mutex, &ts);
+
+		if (r == ETIMEDOUT) {
+			pthread_mutex_unlock(&dev->ll_mutex);
+			continue;
+		}
+
+		curelem = dev->ll_buffers;
+		dev->ll_buffers = NULL;
+		pthread_mutex_unlock(&dev->ll_mutex);
+
+		while (curelem != NULL) {
+			//	printf("got a buffer for sid %d with len %d\n", curelem->sid, bytesleft);
+			hsdaoh_output(dev, curelem->sid, curelem->format, curelem->data, curelem->len);
+
+			prev = curelem;
+			curelem = curelem->next;
+			free(prev->data);
+			free(prev);
+		}
+	}
+}
+
+void hsdaoh_enqueue_data(hsdaoh_dev_t *dev, uint16_t sid, int format, uint8_t *data, size_t len)
+{
+	if (dev->async_status != HSDAOH_RUNNING) {
+		free(data);
+		return;
+	}
+
+	struct llist *rpt = (struct llist*)malloc(sizeof(struct llist));
+	rpt->data = data;
+	rpt->len = len;
+	rpt->sid = sid;
+	rpt->format = format;
+	rpt->next = NULL;
+
+	pthread_mutex_lock(&dev->ll_mutex);
+
+	if (dev->ll_buffers == NULL) {
+		dev->ll_buffers = rpt;
+	} else {
+		struct llist *cur = dev->ll_buffers;
+		unsigned int num_queued = 0;
+
+		while (cur->next != NULL) {
+			cur = cur->next;
+			num_queued++;
+		}
+
+		if (dev->llbuf_num && dev->llbuf_num == num_queued-2) {
+			struct llist *curelem;
+			fprintf(stderr, "Buffer dropped due to overrun!\n");
+			free(dev->ll_buffers->data);
+			curelem = dev->ll_buffers->next;
+			free(dev->ll_buffers);
+			dev->ll_buffers = curelem;
+		}
+
+		cur->next = rpt;
+
+		if (num_queued > dev->highest_numq) {
+			fprintf(stderr, "Maximum buffer queue length: %d\n", num_queued);
+			dev->highest_numq = num_queued;
+		}
+
+		dev->global_numq = num_queued;
+	}
+	pthread_cond_signal(&dev->cond);
+	pthread_mutex_unlock(&dev->ll_mutex);
+}
+
+/* callback for idle/filler data */
+inline int hsdaoh_check_idle_cnt(hsdaoh_dev_t *dev, uint16_t *buf, size_t length)
+{
+	int idle_counter_errors = 0;
+
+	if (length == 0)
+		return 0;
+
+	for (unsigned int i = 0; i < length; i++) {
+		if (buf[i] != ((dev->idle_cnt+1) & 0xffff))
+			idle_counter_errors++;
+
+		dev->idle_cnt = buf[i];
+	}
+
+	return idle_counter_errors;
+}
+
+/* Extract the metadata stored in the upper 4 bits of the last word of each line */
+inline void hsdaoh_extract_metadata(uint8_t *data, metadata_t *metadata, unsigned int width)
+{
+	uint8_t *meta = (uint8_t *)metadata;
+
+	for (unsigned i = 0; i < sizeof(metadata_t)*2; i += 2)
+		meta[i/2] = (data[((i+1)*width*2) - 1] >> 4) | (data[((i+2)*width*2) - 1] & 0xf0);
+}
+
 void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 {
-	uint32_t frame_payload_bytes = 0;
-
 	metadata_t meta;
 	hsdaoh_extract_metadata(data, &meta, dev->width);
 
@@ -612,7 +701,9 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 
 	dev->last_frame_cnt = meta.framecounter;
 	int frame_errors = 0;
+	unsigned int stream0_payload_bytes = 0;
 	uint16_t stream0_format = 0;
+	uint8_t *stream0_data = malloc(dev->width-1 * dev->height  * 2);
 
 	for (unsigned int i = 0; i < dev->height; i++) {
 		uint8_t *line_dat = data + (dev->width * sizeof(uint16_t) * i);
@@ -645,28 +736,32 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		} else if ((meta.crc_config == CRC16_1_LINE) || (meta.crc_config == CRC16_2_LINE)) {
 			uint16_t expected_crc = (meta.crc_config == CRC16_1_LINE) ? dev->last_crc[0] : dev->last_crc[1];
 
-			if ((crc != expected_crc) && dev->stream_synced) {
+			if ((crc != expected_crc) && dev->stream_synced)
 				frame_errors++;
-				fprintf(stderr, "Checksum mismatch in line %d: %04x != %04x\n", i, crc, expected_crc);
-			}
 
 			dev->last_crc[1] = dev->last_crc[0];
 			dev->last_crc[0] = crc16_ccitt(line_dat, dev->width * sizeof(uint16_t));
 		}
 
 		if ((payload_len > 0) && dev->stream_synced) {
+			unsigned int out_len = payload_len * sizeof(uint16_t);
+
 			if (!(meta.flags & FLAG_STREAM_ID_PRESENT) || stream_id == 0) {
-				memmove(data + frame_payload_bytes, line_dat, payload_len * sizeof(uint16_t));
-				frame_payload_bytes += payload_len * sizeof(uint16_t);
+				memcpy(stream0_data + stream0_payload_bytes, line_dat, out_len);
+				stream0_payload_bytes += out_len;
 				stream0_format = format;
 			} else {
-				hsdaoh_output(dev, stream_id, format, line_dat, payload_len * sizeof(uint16_t));
+				uint8_t *out_data = malloc(out_len);
+				memcpy(out_data, line_dat, out_len);
+				hsdaoh_enqueue_data(dev, stream_id, format, out_data, out_len);
 			}
 		}
 	}
 
-	if (dev->stream_synced && frame_payload_bytes)
-		hsdaoh_output(dev, 0, stream0_format, data, frame_payload_bytes);
+	if (dev->stream_synced && stream0_payload_bytes)
+		hsdaoh_enqueue_data(dev, 0, stream0_format, stream0_data, stream0_payload_bytes);
+	else
+		free(stream0_data);
 
 	if (frame_errors && dev->stream_synced) {
 		fprintf(stderr,"%d frame errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
@@ -705,7 +800,7 @@ void _uvc_callback(uvc_frame_t *frame, void *ptr)
 	hsdaoh_process_frame(dev, (uint8_t *)frame->data, frame->data_bytes);
 }
 
-int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx)
+int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx, unsigned int buf_num)
 {
 	int r = 0;
 
@@ -723,7 +818,20 @@ int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx)
 	dev->cb = cb;
 	dev->cb_ctx = ctx;
 
-	dev->output_float = true;
+//	dev->output_float = true;
+
+	/* initialize with a threshold */
+	dev->highest_numq = 9;
+	dev->llbuf_num = (buf_num == 0) ? DEFAULT_BUFFERS : buf_num;
+
+	pthread_mutex_init(&dev->ll_mutex, NULL);
+	pthread_cond_init(&dev->cond, NULL);
+
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	r = pthread_create(&dev->hsdaoh_output_worker_thread, &attr, hsdaoh_output_worker, (void *)dev);
+	pthread_attr_destroy(&attr);
 
 	uvc_error_t res;
 	uvc_stream_ctrl_t ctrl;
@@ -761,9 +869,26 @@ int hsdaoh_stop_stream(hsdaoh_dev_t *dev)
 	if (HSDAOH_RUNNING == dev->async_status) {
 		dev->async_status = HSDAOH_CANCELING;
 		dev->async_cancel = 1;
+		pthread_cond_signal(&dev->cond);
 
 		/* End the stream. Blocks until last callback is serviced */
 		uvc_stop_streaming(dev->uvc_devh);
+
+		void *status;
+		struct llist *curelem, *prev;
+		pthread_join(dev->hsdaoh_output_worker_thread, &status);
+
+		curelem = dev->ll_buffers;
+		dev->ll_buffers = NULL;
+
+		while (curelem != 0) {
+			prev = curelem;
+			curelem = curelem->next;
+			free(prev->data);
+			free(prev);
+		}
+
+		dev->global_numq = 0;
 
 		return 0;
 	}

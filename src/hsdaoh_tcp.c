@@ -472,7 +472,7 @@ int main(int argc, char **argv)
 		r = pthread_create(&command_thread, &attr, command_worker, NULL);
 		pthread_attr_destroy(&attr);
 
-		r = hsdaoh_start_stream(dev, hsdaoh_callback, NULL);
+		r = hsdaoh_start_stream(dev, hsdaoh_callback, NULL, 0);
 		while (!do_exit) {
 			usleep(50000);
 		}
