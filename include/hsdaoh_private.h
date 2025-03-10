@@ -7,6 +7,14 @@ enum hsdaoh_async_status {
 	HSDAOH_RUNNING
 };
 
+struct llist {
+	uint8_t *data;
+	size_t len;
+	uint16_t sid;
+	uint16_t format;
+	struct llist *next;
+};
+
 struct hsdaoh_dev {
 	libusb_context *ctx;
 	struct libusb_device_handle *devh;
@@ -44,6 +52,16 @@ struct hsdaoh_dev {
 	unsigned int xfer_errors;
 	char manufact[256];
 	char product[256];
+
+	/* buffering */
+	pthread_t hsdaoh_output_worker_thread;
+
+	pthread_mutex_t ll_mutex;
+	pthread_cond_t cond;
+	unsigned int highest_numq;
+	unsigned int global_numq;
+	struct llist *ll_buffers;
+	unsigned int llbuf_num;
 };
 
 enum

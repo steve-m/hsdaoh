@@ -114,11 +114,14 @@ typedef void(*hsdaoh_read_cb_t)(hsdaoh_data_info_t *data_info);
  * \param dev the device handle given by hsdaoh_open()
  * \param cb callback function to return received data
  * \param ctx user specific context to pass via the callback function
+ * \param buf_num optional buffer count
+ *		  set to 0 for default buffer count (16)
  * \return 0 on success
  */
 HSDAOH_API int hsdaoh_start_stream(hsdaoh_dev_t *dev,
 				   hsdaoh_read_cb_t cb,
-				   void *ctx);
+				   void *ctx,
+				   unsigned int buf_num);
 
 /*!
  * Stop streaming data from the device.

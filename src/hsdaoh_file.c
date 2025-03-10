@@ -40,7 +40,6 @@
 #define FD_NUMS				4
 
 static int do_exit = 0;
-static uint32_t bytes_to_read = 0;
 static hsdaoh_dev_t *dev = NULL;
 
 typedef struct file_ctx {
@@ -53,8 +52,7 @@ void usage(void)
 		"hsdaoh_file, HDMI data acquisition tool\n\n"
 		"Usage:\n"
 		"\t[-d device_index (default: 0)]\n"
-		"\t[-p ppm_error (default: 0)]\n"
-		"\t[-n number of samples to read (default: 0, infinite)]\n"
+		"\t[-b maximum number of buffers (default: 16)]\n"
 		"\t[-0 to -3 filename of steam 0 to stream 3 (a '-' dumps samples to stdout)]\n"
 		"\tfilename (of stream 0) (a '-' dumps samples to stdout)\n\n");
 	exit(1);
@@ -99,12 +97,6 @@ static void hsdaoh_callback(hsdaoh_data_info_t *data_info)
 	if (!file)
 		return;
 
-	if ((bytes_to_read > 0) && (bytes_to_read < len)) {
-		len = bytes_to_read;
-		do_exit = 1;
-		hsdaoh_stop_stream(dev);
-	}
-
 	while (nbytes < len) {
 		nbytes += fwrite(data_info->buf + nbytes, 1, len - nbytes, file);
 
@@ -114,9 +106,6 @@ static void hsdaoh_callback(hsdaoh_data_info_t *data_info)
 			break;
 		}
 	}
-
-	if (bytes_to_read > 0)
-		bytes_to_read -= len;
 }
 
 int main(int argc, char **argv)
@@ -127,22 +116,19 @@ int main(int argc, char **argv)
 	char *filenames[FD_NUMS] = { NULL, };
 	int n_read;
 	int r, opt;
-	int ppm_error = 0;
 	file_ctx_t f;
 	int dev_index = 0;
+	unsigned int num_bufs = 0;
 	bool fname0_used = false;
 	bool have_file = false;
 
-	while ((opt = getopt(argc, argv, "0:1:2:3:d:n:p:d:a:")) != -1) {
+	while ((opt = getopt(argc, argv, "0:1:2:3:d:b:")) != -1) {
 		switch (opt) {
 		case 'd':
 			dev_index = (uint32_t)atoi(optarg);
 			break;
-		case 'p':
-			ppm_error = atoi(optarg);
-			break;
-		case 'n':
-			bytes_to_read = (uint32_t)atof(optarg) * 2;
+		case 'b':
+			num_bufs = (unsigned int)atoi(optarg);
 			break;
 		case '0':
 			fname0_used = true;
@@ -216,8 +202,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	fprintf(stderr, "Reading samples...\n");
-	r = hsdaoh_start_stream(dev, hsdaoh_callback, (void *)&f);
+	r = hsdaoh_start_stream(dev, hsdaoh_callback, (void *)&f, num_bufs);
 
 	while (!do_exit) {
 		usleep(50000);

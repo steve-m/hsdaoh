@@ -294,7 +294,7 @@ int main(int argc, char **argv)
 	fprintf(stderr, "Reporting PPM error measurement every %u seconds...\n", ppm_duration);
 	fprintf(stderr, "Press ^C after a few minutes.\n");
 
-	r = hsdaoh_start_stream(dev, hsdaoh_callback, NULL);
+	r = hsdaoh_start_stream(dev, hsdaoh_callback, NULL, 0);
 
 	while (!do_exit)
 		usleep(50000);
