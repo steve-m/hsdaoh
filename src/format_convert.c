@@ -228,7 +228,7 @@ void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_i
 {
 	uint16_t *in = (uint16_t *)data_info->buf;
 	size_t inlen = data_info->len / sizeof(uint16_t);
-	unsigned int i, j = 0;
+	unsigned int j = 0;
 	uint16_t *out16_1 = malloc(sizeof(uint16_t) * inlen * 2);
 	uint16_t *out16_2 = malloc(sizeof(uint16_t) * inlen * 2);
 
@@ -236,7 +236,7 @@ void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_i
 		return;
 
 	/* extract packed 2x12 bit samples */
-	for (i = 0; i < inlen; i += 3) {
+	for (int i = 0; i < inlen; i += 3) {
 		uint16_t lsbs = in[i+2];
 		out16_1[j]   = ((in[i+0] & 0xff00) >> 4) | ((lsbs >>  0) & 0xf);
 		out16_2[j++] = ((in[i+0] & 0x00ff) << 4) | ((lsbs >>  4) & 0xf);
@@ -245,10 +245,10 @@ void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_i
 	}
 
 	if (dev->output_float) {
-		hsdaoh_16bit_to_float(dev, data_info, out16_1, i, 2047.5, true);
+		hsdaoh_16bit_to_float(dev, data_info, out16_1, j, 2047.5, true);
 	} else {
 		data_info->buf = (uint8_t *)out16_1;
-		data_info->len = i * sizeof(uint16_t);
+		data_info->len = j * sizeof(uint16_t);
 
 		dev->cb(data_info);
 	}
@@ -256,10 +256,10 @@ void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_i
 	data_info->stream_id += 1;
 
 	if (dev->output_float) {
-		hsdaoh_16bit_to_float(dev, data_info, out16_2, i, 2047.5, true);
+		hsdaoh_16bit_to_float(dev, data_info, out16_2, j, 2047.5, true);
 	} else {
 		data_info->buf = (uint8_t *)out16_2;
-		data_info->len = i * sizeof(uint16_t);
+		data_info->len = j * sizeof(uint16_t);
 
 		dev->cb(data_info);
 	}

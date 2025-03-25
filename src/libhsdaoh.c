@@ -72,6 +72,16 @@ enum crc_config {
 	CRC16_2_LINE		/* Line contains CRC of the line before the last line */
 };
 
+#define DEFAULT_MAX_STREAMS		8
+
+typedef struct
+{
+	uint64_t data_cnt;
+	uint32_t srate;
+	uint32_t reserved1;
+	char reserved2[16];
+} __attribute__((packed, aligned(1))) stream_info_t;
+
 typedef struct
 {
 	uint32_t magic;
@@ -80,6 +90,10 @@ typedef struct
 	uint8_t  crc_config;
 	uint16_t version;
 	uint32_t flags;
+	uint32_t reserved2[8];
+	uint16_t stream0_format;
+	uint16_t max_streamid;
+	stream_info_t stream_info[DEFAULT_MAX_STREAMS];
 } __attribute__((packed, aligned(1))) metadata_t;
 
 #define FLAG_STREAM_ID_PRESENT	(1 << 0)
@@ -552,6 +566,9 @@ void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint8_t *data, s
 		case PIO_PCM1802_AUDIO:
 			hsdaoh_unpack_pio_pcm1802_audio(dev, &data_info);
 			break;
+		case FPGA_12BIT_DUAL:
+			hsdaoh_unpack_fpga_12bit_dual(dev, &data_info);
+			break;
 		default:
 			dev->cb(&data_info);
 			break;
@@ -587,7 +604,6 @@ static void *hsdaoh_output_worker(void *arg)
 		pthread_mutex_unlock(&dev->ll_mutex);
 
 		while (curelem != NULL) {
-			//	printf("got a buffer for sid %d with len %d\n", curelem->sid, bytesleft);
 			hsdaoh_output(dev, curelem->sid, curelem->format, curelem->data, curelem->len);
 
 			prev = curelem;
@@ -716,8 +732,10 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 
 		if (meta.flags & FLAG_STREAM_ID_PRESENT)
 			stream_id &= 0x3f;
-		else
+		else {
 			stream_id = 0;
+			format =  meta.stream0_format;
+		}
 
 		/* we only use 12 bits, the upper 4 bits are reserved for the metadata */
 		payload_len &= 0x0fff;
