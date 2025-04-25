@@ -53,6 +53,7 @@ void usage(void)
 		"Usage:\n"
 		"\t[-d device_index (default: 0)]\n"
 		"\t[-b maximum number of buffers (default: 16)]\n"
+		"\t[-s save 16-bit streams as signed integer]\n"
 		"\t[-0 to -3 filename of steam 0 to stream 3 (a '-' dumps samples to stdout)]\n"
 		"\tfilename (of stream 0) (a '-' dumps samples to stdout)\n\n");
 	exit(1);
@@ -121,14 +122,18 @@ int main(int argc, char **argv)
 	unsigned int num_bufs = 0;
 	bool fname0_used = false;
 	bool have_file = false;
+	bool set_signed = false;
 
-	while ((opt = getopt(argc, argv, "0:1:2:3:d:b:")) != -1) {
+	while ((opt = getopt(argc, argv, "0:1:2:3:d:b:s:")) != -1) {
 		switch (opt) {
 		case 'd':
 			dev_index = (uint32_t)atoi(optarg);
 			break;
 		case 'b':
 			num_bufs = (unsigned int)atoi(optarg);
+			break;
+		case 's':
+		    set_signed = true;
 			break;
 		case '0':
 			fname0_used = true;
@@ -165,7 +170,7 @@ int main(int argc, char **argv)
 	if (dev_index < 0)
 		exit(1);
 
-	r = hsdaoh_open(&dev, (uint32_t)dev_index);
+	r = hsdaoh_open(&dev, (uint32_t)dev_index, set_signed);
 	if (r < 0) {
 		fprintf(stderr, "Failed to open hsdaoh device #%d.\n", dev_index);
 		exit(1);

@@ -84,7 +84,7 @@ HSDAOH_API int hsdaoh_get_device_usb_strings(uint32_t index,
  */
 HSDAOH_API int hsdaoh_get_index_by_serial(const char *serial);
 
-HSDAOH_API int hsdaoh_open(hsdaoh_dev_t **dev, uint32_t index);
+HSDAOH_API int hsdaoh_open(hsdaoh_dev_t **dev, uint32_t index, bool out_signed);
 
 HSDAOH_API int hsdaoh_close(hsdaoh_dev_t *dev);
 

@@ -69,10 +69,15 @@ void hsdaoh_unpack_pio_12bit(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
 	unsigned int j = 0;
 
 	for (unsigned int i = 0; i < inlen; i += 3) {
-		out[j++] = (in[i+2] & 0xf000) >> 4 | (in[i+1] & 0xf000) >> 8 | (in[i] >> 12);
-		out[j++] = in[i  ] & 0x0fff;
-		out[j++] = in[i+1] & 0x0fff;
-		out[j++] = in[i+2] & 0x0fff;
+		uint16_t sample1 = (in[i+2] & 0xf000) >> 4 | (in[i+1] & 0xf000) >> 8 | (in[i] >> 12);
+		uint16_t sample2 = in[i  ] & 0x0fff;
+		uint16_t sample3 = in[i+1] & 0x0fff;
+		uint16_t sample4 = in[i+2] & 0x0fff;
+
+		out[j++] = dev->output_signed ? (int16_t)((sample1 - 2048) << 4) : sample1;
+		out[j++] = dev->output_signed ? (int16_t)((sample2 - 2048) << 4) : sample2;
+		out[j++] = dev->output_signed ? (int16_t)((sample3 - 2048) << 4) : sample3;
+		out[j++] = dev->output_signed ? (int16_t)((sample4 - 2048) << 4) : sample4;
 	}
 
 	if (dev->output_float) {
@@ -107,8 +112,11 @@ void hsdaoh_unpack_pio_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_in
 	}
 
 	for (i = 0; i < j; i++) {
-		out16_1[i] = (out[i] >> 12) & 0x0fff;
-		out16_2[i] = out[i] & 0x0fff;
+		uint16_t sample1 = (out[i] >> 12) & 0x0fff;
+		uint16_t sample2 = out[i] & 0x0fff;
+
+		out16_1[i] = dev->output_signed ? (int16_t)((sample1 - 2048) << 4) : sample1;
+		out16_2[i] = dev->output_signed ? (int16_t)((sample2 - 2048) << 4) : sample2;
 	}
 
 	if (dev->output_float) {
@@ -238,10 +246,16 @@ void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_i
 	/* extract packed 2x12 bit samples */
 	for (int i = 0; i < inlen; i += 3) {
 		uint16_t lsbs = in[i+2];
-		out16_1[j]   = ((in[i+0] & 0xff00) >> 4) | ((lsbs >>  0) & 0xf);
-		out16_2[j++] = ((in[i+0] & 0x00ff) << 4) | ((lsbs >>  4) & 0xf);
-		out16_1[j]   = ((in[i+1] & 0xff00) >> 4) | ((lsbs >>  8) & 0xf);
-		out16_2[j++] = ((in[i+1] & 0x00ff) << 4) | ((lsbs >> 12) & 0xf);
+
+		uint16_t sample1 = ((in[i+0] & 0xff00) >> 4) | ((lsbs >>  0) & 0xf);
+		uint16_t sample2 = ((in[i+0] & 0x00ff) << 4) | ((lsbs >>  4) & 0xf);
+		uint16_t sample3 = ((in[i+1] & 0xff00) >> 4) | ((lsbs >>  8) & 0xf);
+		uint16_t sample4 = ((in[i+1] & 0x00ff) << 4) | ((lsbs >> 12) & 0xf);
+
+		out16_1[j]   = dev->output_signed ? (int16_t)((sample1 - 2048) << 4) : sample1;
+		out16_2[j++] = dev->output_signed ? (int16_t)((sample2 - 2048) << 4) : sample2;
+		out16_1[j]   = dev->output_signed ? (int16_t)((sample3 - 2048) << 4) : sample3;
+		out16_2[j++] = dev->output_signed ? (int16_t)((sample4 - 2048) << 4) : sample4;
 	}
 
 	if (dev->output_float) {

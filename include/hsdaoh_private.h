@@ -44,6 +44,7 @@ struct hsdaoh_dev {
 	unsigned int width, height, fps;
 
 	bool output_float;
+	bool output_signed;
 	iqconverter_float_t *cnv_f;
 
 	/* status */

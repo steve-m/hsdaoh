@@ -325,6 +325,7 @@ int main(int argc, char **argv)
 	fd_set readfds;
 	u_long blockmode = 1;
 	dongle_info_t dongle_info;
+	int set_signed = 0;
 
 #ifdef _WIN32
 	WSADATA wsd;
@@ -333,7 +334,7 @@ int main(int argc, char **argv)
 	struct sigaction sigact, sigign;
 #endif
 
-	while ((opt = getopt(argc, argv, "a:p:b:n:d")) != -1) {
+	while ((opt = getopt(argc, argv, "a:p:b:n:d:s")) != -1) {
 		switch (opt) {
 		case 'd':
 			dev_index = (uint32_t)atoi(optarg);
@@ -350,6 +351,9 @@ int main(int argc, char **argv)
 		case 'n':
 			llbuf_num = atoi(optarg);
 			break;
+		case 's':
+			set_signed = 1;
+			break;
 		default:
 			usage();
 			break;
@@ -363,7 +367,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	hsdaoh_open(&dev, (uint32_t)dev_index);
+	hsdaoh_open(&dev, (uint32_t)dev_index, set_signed);
 	if (NULL == dev) {
 	fprintf(stderr, "Failed to open hsdaoh device #%d.\n", dev_index);
 		exit(1);

@@ -405,7 +405,7 @@ int _hsdaoh_open_uvc_device(hsdaoh_dev_t *dev)
 	return (int)r;
 }
 
-int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
+int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index, bool out_signed)
 {
 	int r;
 	int i;
@@ -422,6 +422,10 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 		return -ENOMEM;
 
 	memset(dev, 0, sizeof(hsdaoh_dev_t));
+
+	if (out_signed) {
+	   dev->output_signed = 1;
+	}
 
 	r = libusb_init(&dev->ctx);
 	if(r < 0){

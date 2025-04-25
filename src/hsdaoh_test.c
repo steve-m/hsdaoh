@@ -274,7 +274,7 @@ int main(int argc, char **argv)
 	if (dev_index < 0)
 		exit(1);
 
-	r = hsdaoh_open(&dev, (uint32_t)dev_index);
+	r = hsdaoh_open(&dev, (uint32_t)dev_index, 0);
 	if (r < 0) {
 		fprintf(stderr, "Failed to open hsdaoh device #%d.\n", dev_index);
 		exit(1);
