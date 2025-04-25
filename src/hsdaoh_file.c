@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 			num_bufs = (unsigned int)atoi(optarg);
 			break;
 		case 's':
-		    set_signed = true;
+		    	set_signed = true;
 			break;
 		case '0':
 			fname0_used = true;
