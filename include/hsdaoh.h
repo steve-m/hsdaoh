@@ -41,6 +41,10 @@ typedef struct hsdaoh_data_info {
 	unsigned char *buf;
 	size_t len;			/* buffer length */
 	uint16_t stream_id;
+	uint32_t srate;
+	uint8_t nchans;
+	uint8_t bits_per_samp;
+	bool is_signed;
 	bool device_error;		/* device error happened, terminate application */
 } hsdaoh_data_info_t;
 

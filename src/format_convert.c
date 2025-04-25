@@ -111,6 +111,9 @@ void hsdaoh_unpack_pio_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_in
 		out16_2[i] = out[i] & 0x0fff;
 	}
 
+	data_info->bits_per_samp = 12;
+	data_info->nchans = 1;
+
 	if (dev->output_float) {
 		hsdaoh_16bit_to_float(dev, data_info, out16_1, i, 2047.5, true);
 	} else {
@@ -220,6 +223,8 @@ void hsdaoh_unpack_pio_pcm1802_audio(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data
 
 	data_info->buf = (uint8_t *)in;
 	data_info->len = inlen * sizeof(uint32_t);
+	data_info->bits_per_samp = 24;
+	data_info->nchans = 2;
 
 	dev->cb(data_info);
 }

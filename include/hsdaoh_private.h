@@ -12,6 +12,7 @@ struct llist {
 	size_t len;
 	uint16_t sid;
 	uint16_t format;
+	uint32_t srate;
 	struct llist *next;
 };
 
