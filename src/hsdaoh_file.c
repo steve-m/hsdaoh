@@ -48,6 +48,7 @@ static uint32_t flac_level = 5;
 static uint32_t flac_nthreads = 4;
 
 typedef struct file_ctx {
+	bool use_signed[FD_NUMS];
 	FILE *files[FD_NUMS];
 	bool use_flac[FD_NUMS];
 	FLAC__StreamEncoder *encoder[FD_NUMS];
@@ -168,7 +169,7 @@ static void hsdaoh_callback(hsdaoh_data_info_t *data_info)
 			FLAC__int32 test[len/sizeof(uint16_t)];
 			uint16_t *dat = (uint16_t *)data_info->buf;
 			for (int i = 0; i < len/sizeof(uint16_t); i++) {
-				test[i] = dat[i] - 2047;
+				test[i] = dat[i] - 2048;
 			}
 
 			ok = FLAC__stream_encoder_process_interleaved(f->encoder[data_info->stream_id], test, len/sizeof(uint16_t));
@@ -300,13 +301,21 @@ int main(int argc, char **argv)
 			}
 
 			char *dot = strrchr(filenames[i], '.');
-			if (dot && !strcmp(dot, ".flac"))
+			if (dot && !strcmp(dot, ".flac")) {
 				f.use_flac[i] = true;
-			else
+				f.use_signed[i] = false;
+			} else if (dot && !strcmp(dot, ".s16") && i < 2) {
 				f.use_flac[i] = false;
+				f.use_signed[i] = true;
+			} else {
+				f.use_flac[i] = false;
+				f.use_signed[i] = false;
+			}
 
 			if (f.use_flac[i])
 				printf("File %d is flac!\n", i);
+			if (f.use_signed[i])
+				printf("File %d is signed!\n", i);
 		}
 	}
 

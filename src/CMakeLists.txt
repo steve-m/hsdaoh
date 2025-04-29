@@ -89,6 +89,7 @@ set(INSTALL_TARGETS hsdaoh hsdaoh_static hsdaoh_file hsdaoh_tcp hsdaoh_test)
 
 target_link_libraries(hsdaoh_file hsdaoh
     ${LIBFLAC_LIBRARIES}
+    ${LIBOGG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
 )
 target_link_libraries(hsdaoh_tcp hsdaoh
