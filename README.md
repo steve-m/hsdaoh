@@ -54,7 +54,7 @@ To build hsdaoh:
     sudo make install
     sudo ldconfig
 
-To be able to access the USB device as non-root, the udev rules need to be installed (either use -DINSTALL_UDEV_RULES=ON or manually copy hsdaoh.rules to /etc/udev/rules.d/).
+To be able to access the USB device as non-root, the udev rules need to be installed (either use -DINSTALL_UDEV_RULES=ON or manually copy 71-hsdaoh.rules to /etc/udev/rules.d/).
 
 Before being able to use the device as a non-root user, the udev rules need to be reloaded:
 
