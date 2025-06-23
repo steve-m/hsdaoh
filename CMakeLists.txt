@@ -124,7 +124,7 @@ add_custom_target(uninstall
 option(INSTALL_UDEV_RULES "Install udev rules" ON)
 if (INSTALL_UDEV_RULES)
     install (
-        FILES hsdaoh.rules
+        FILES 71-hsdaoh.rules
         DESTINATION "/etc/udev/rules.d"
         COMPONENT "udev"
         )

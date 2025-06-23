@@ -16,10 +16,10 @@
 #
 
 # MS2130
-SUBSYSTEMS=="usb", ATTRS{idVendor}=="345f", ATTRS{idProduct}=="2130", ENV{ID_SOFTWARE_RADIO}="1", MODE="0660", GROUP="plugdev"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="345f", ATTRS{idProduct}=="2130", ENV{ID_SOFTWARE_RADIO}="1", MODE="0660", GROUP="plugdev", TAG+="uaccess"
 
 # MS2130 OEM
-SUBSYSTEMS=="usb", ATTRS{idVendor}=="534d", ATTRS{idProduct}=="2130", ENV{ID_SOFTWARE_RADIO}="1", MODE="0660", GROUP="plugdev"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="534d", ATTRS{idProduct}=="2130", ENV{ID_SOFTWARE_RADIO}="1", MODE="0660", GROUP="plugdev", TAG+="uaccess"
 
 # MS2131
-SUBSYSTEMS=="usb", ATTRS{idVendor}=="345f", ATTRS{idProduct}=="2131", ENV{ID_SOFTWARE_RADIO}="1", MODE="0660", GROUP="plugdev"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="345f", ATTRS{idProduct}=="2131", ENV{ID_SOFTWARE_RADIO}="1", MODE="0660", GROUP="plugdev", TAG+="uaccess"
