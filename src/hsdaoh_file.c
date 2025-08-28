@@ -35,15 +35,23 @@
 #define usleep(t) Sleep((t)/1000)
 #endif
 
+#include "FLAC/metadata.h"
+#include "FLAC/stream_encoder.h"
+
 #include "hsdaoh.h"
 
 #define FD_NUMS				4
 
-static int do_exit = 0;
+static bool do_exit = false;
 static hsdaoh_dev_t *dev = NULL;
+static uint32_t flac_level = 5;
+static uint32_t flac_nthreads = 4;
 
 typedef struct file_ctx {
 	FILE *files[FD_NUMS];
+	bool use_flac[FD_NUMS];
+	FLAC__StreamEncoder *encoder[FD_NUMS];
+	FLAC__StreamMetadata *seektable[FD_NUMS];
 } file_ctx_t;
 
 void usage(void)
@@ -52,9 +60,14 @@ void usage(void)
 		"hsdaoh_file, HDMI data acquisition tool\n\n"
 		"Usage:\n"
 		"\t[-d device_index (default: 0)]\n"
-		"\t[-b maximum number of buffers (default: 16)]\n"
-		"\t[-0 to -3 filename of steam 0 to stream 3 (a '-' dumps samples to stdout)]\n"
-		"\tfilename (of stream 0) (a '-' dumps samples to stdout)\n\n");
+		"\t[-b maximum number of buffers (default: 96)]\n"
+		"\t[-l FLAC compression level (default: 5)]\n"
+#ifdef FLAC__STREAM_ENCODER_SET_NUM_THREADS_OK
+		"\t[-t number of threads for FLAC encoding (default: 4)]\n"
+#endif
+		"\t[-0 to -3 filename of stream 0 to stream 3 (a '-' dumps samples to stdout)]\n"
+		"\tfilename (of stream 0) (a '-' dumps samples to stdout)\n\n"
+		"\tFilenames with the extension .flac will enable FLAC encoding\n\n");
 	exit(1);
 }
 
@@ -64,7 +77,7 @@ sighandler(int signum)
 {
 	if (CTRL_C_EVENT == signum) {
 		fprintf(stderr, "Signal caught, exiting!\n");
-		do_exit = 1;
+		do_exit = true;
 		hsdaoh_stop_stream(dev);
 		return TRUE;
 	}
@@ -75,7 +88,7 @@ static void sighandler(int signum)
 {
 	signal(SIGPIPE, SIG_IGN);
 	fprintf(stderr, "Signal caught, exiting!\n");
-	do_exit = 1;
+	do_exit = true;
 	hsdaoh_stop_stream(dev);
 }
 #endif
@@ -97,13 +110,110 @@ static void hsdaoh_callback(hsdaoh_data_info_t *data_info)
 	if (!file)
 		return;
 
-	while (nbytes < len) {
-		nbytes += fwrite(data_info->buf + nbytes, 1, len - nbytes, file);
+	FLAC__StreamEncoder *encoder = f->encoder[data_info->stream_id];
+	/* allocate FLAC encoder if required */
+	if (f->use_flac[data_info->stream_id] && !encoder) {
+		FLAC__bool ret = true;
+		FLAC__StreamEncoderInitStatus init_status;
 
-		if (ferror(file)) {
-			fprintf(stderr, "Error writing file, samples lost, exiting!\n");
+		if ((encoder = FLAC__stream_encoder_new()) == NULL) {
+			fprintf(stderr, "ERROR: failed allocating FLAC encoder\n");
+			do_exit = true;
+			return;
+		}
+
+		ret &= FLAC__stream_encoder_set_verify(encoder, false);
+		ret &= FLAC__stream_encoder_set_compression_level(encoder, flac_level);
+		ret &= FLAC__stream_encoder_set_sample_rate(encoder,
+							   data_info->srate > FLAC__MAX_SAMPLE_RATE ?
+							   data_info->srate/1000 : data_info->srate);
+
+		ret &= FLAC__stream_encoder_set_channels(encoder, data_info->nchans);
+		ret &= FLAC__stream_encoder_set_bits_per_sample(encoder, data_info->bits_per_samp);
+		ret &= FLAC__stream_encoder_set_total_samples_estimate(encoder, 0);
+		ret &= FLAC__stream_encoder_set_streamable_subset(encoder, false);
+
+#ifdef FLAC__STREAM_ENCODER_SET_NUM_THREADS_OK
+		if (FLAC__stream_encoder_set_num_threads(encoder, flac_nthreads) != FLAC__STREAM_ENCODER_SET_NUM_THREADS_OK)
+			ret = false;
+#endif
+
+		if (!ret) {
+			fprintf(stderr, "ERROR: failed initializing FLAC encoder\n");
+			do_exit = true;
+			return;
+		}
+
+		init_status = FLAC__stream_encoder_init_FILE(encoder, f->files[data_info->stream_id], NULL, NULL);
+		if (init_status != FLAC__STREAM_ENCODER_INIT_STATUS_OK) {
+			fprintf(stderr, "ERROR: failed initializing FLAC encoder: %s\n", FLAC__StreamEncoderInitStatusString[init_status]);
+			do_exit = true;
+			return;
+		}
+
+		f->encoder[data_info->stream_id] = encoder;
+	}
+
+	if (f->use_flac[data_info->stream_id]) {
+		/* write FLAC output */
+		FLAC__bool ok = false;
+		FLAC__int32 offset = data_info->is_signed ? 0 : 1 << (data_info->bits_per_samp - 1);
+		int bytes_per_samp = ((data_info->bits_per_samp - 1) / 8) + 1;
+		int nsamps = len / bytes_per_samp;
+		FLAC__int32 *out = malloc(nsamps * sizeof(FLAC__int32));
+		int i = 0;
+
+		if (bytes_per_samp == 1) {
+			/* data encoded in uint8 */
+			uint8_t *dat = (uint8_t *)data_info->buf;
+
+			for (; i < nsamps; i++)
+				out[i] = dat[i] - offset;
+		} else if (bytes_per_samp == 2) {
+			/* data encoded in uint16 */
+			uint16_t *dat = (uint16_t *)data_info->buf;
+
+			for (; i < nsamps; i++)
+				out[i] = dat[i] - offset;
+		} else if (bytes_per_samp == 3) {
+			/* data encoded in 3 * uint8 */
+			uint8_t *dat = (uint8_t *)data_info->buf;
+			int j = 0;
+
+			for (; i < nsamps; i++) {
+				/* convert S24_3LE and take care of sign extension */
+				FLAC__int32 samp = (FLAC__int32)((dat[j+2] << 24) | (dat[j+1] << 16) | (dat[j] << 8));
+				//samp /= 256;
+				samp >>= (32 - data_info->bits_per_samp);
+				j += 3;
+				out[i] = samp - offset;
+			}
+		} else {
+			/* data encoded in uint32 */
+			uint32_t *dat = (uint32_t *)data_info->buf;
+
+			for (; i < nsamps; i++)
+				out[i] = dat[i] - offset;
+		}
+
+		ok = FLAC__stream_encoder_process_interleaved(f->encoder[data_info->stream_id], out, nsamps / data_info->nchans);
+		free(out);
+
+		if (!ok && encoder) {
+			fprintf(stderr, "ERROR: () FLAC encoder could not process data: %s\n",
+					FLAC__StreamEncoderStateString[FLAC__stream_encoder_get_state(encoder)]);
 			hsdaoh_stop_stream(dev);
-			break;
+		}
+	} else {
+		/* write raw file output */
+		while (nbytes < len) {
+			nbytes += fwrite(data_info->buf + nbytes, 1, len - nbytes, file);
+
+			if (ferror(file)) {
+				fprintf(stderr, "Error writing file, samples lost, exiting!\n");
+				hsdaoh_stop_stream(dev);
+				break;
+			}
 		}
 	}
 }
@@ -116,19 +226,25 @@ int main(int argc, char **argv)
 	char *filenames[FD_NUMS] = { NULL, };
 	int n_read;
 	int r, opt;
-	file_ctx_t f;
+	file_ctx_t f = { 0 };
 	int dev_index = 0;
 	unsigned int num_bufs = 0;
 	bool fname0_used = false;
 	bool have_file = false;
 
-	while ((opt = getopt(argc, argv, "0:1:2:3:d:b:")) != -1) {
+	while ((opt = getopt(argc, argv, "0:1:2:3:d:b:l:t:")) != -1) {
 		switch (opt) {
 		case 'd':
 			dev_index = (uint32_t)atoi(optarg);
 			break;
 		case 'b':
 			num_bufs = (unsigned int)atoi(optarg);
+			break;
+		case 'l':
+			flac_level = atoi(optarg);
+			break;
+		case 't':
+			flac_nthreads = atoi(optarg);
 			break;
 		case '0':
 			fname0_used = true;
@@ -184,6 +300,7 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < FD_NUMS; i++) {
 		f.files[i] = NULL;
+		f.encoder[i] = NULL;
 
 		if (!filenames[i])
 			continue;
@@ -199,24 +316,36 @@ int main(int argc, char **argv)
 				fprintf(stderr, "Failed to open %s\n", filenames[i]);
 				goto out;
 			}
+
+			char *dot = strrchr(filenames[i], '.');
+			if (dot && !strcmp(dot, ".flac"))
+				f.use_flac[i] = true;
+			else
+				f.use_flac[i] = false;
 		}
 	}
 
 	r = hsdaoh_start_stream(dev, hsdaoh_callback, (void *)&f, num_bufs);
 
-	while (!do_exit) {
+	while (!do_exit)
 		usleep(50000);
-	}
 
-	if (do_exit)
-		fprintf(stderr, "\nUser cancel, exiting...\n");
-	else
-		fprintf(stderr, "\nLibrary error %d, exiting...\n", r);
-
+	fprintf(stderr, "\nUser cancel, exiting...\n");
 	hsdaoh_close(dev);
 
 	for (int i = 0; i < FD_NUMS; i++) {
-		if (f.files[i] && (f.files[i] != stdout))
+		if (!f.files[i])
+			continue;
+
+		if (f.use_flac[i] && f.encoder[i]) {
+			FLAC__bool ret = FLAC__stream_encoder_finish(f.encoder[i]);
+
+			if (!ret)
+				fprintf(stderr, "ERROR: FLAC encoder did not finish correctly: %s\n",
+						FLAC__StreamEncoderStateString[FLAC__stream_encoder_get_state(f.encoder[i])]);
+
+			FLAC__stream_encoder_delete(f.encoder[i]);
+		} else if (f.files[i] != stdout)
 			fclose(f.files[i]);
 	}
 

@@ -42,7 +42,7 @@ There is one additional dependency to abstract the video input however (libuvc).
 
 To install the build dependencies on a distribution based on Debian (e.g. Ubuntu), run the following command:
 
-    sudo apt-get install build-essential cmake pkgconf libusb-1.0-0-dev libuvc-dev
+    sudo apt-get install build-essential cmake pkgconf libusb-1.0-0-dev libuvc-dev libflac-dev
 
 To build hsdaoh:
 
@@ -80,7 +80,7 @@ pacman -Suy
 
 # Install the required dependencies:
 pacman -S git zip mingw-w64-x86_64-libusb mingw-w64-x86_64-libwinpthread mingw-w64-x86_64-cc \
-mingw-w64-x86_64-gcc-libs mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+mingw-w64-x86_64-gcc-libs mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-flac
 ```
 
 #### Build libuvc
@@ -88,7 +88,7 @@ mingw-w64-x86_64-gcc-libs mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
 # Clone the repository:
 git clone https://github.com/steve-m/libuvc.git
 mkdir libuvc/build && cd libuvc/build
-cmake ../ -DCMAKE_INSTALL_PREFIX:PATH=/mingw64
+cmake ../ -DCMAKE_POLICY_VERSION_MINIMUM=3.10 -DCMAKE_INSTALL_PREFIX:PATH=/mingw64
 cmake --build .
 cmake --install .
 ```
@@ -101,7 +101,7 @@ mkdir hsdaoh/build && cd hsdaoh/build
 cmake ../
 cmake --build .
 # Gather all files required for release
-zip -j hsdaoh_win_release.zip src/*.exe src/*.dll /mingw64/bin/libusb-1.0.dll /mingw64/bin/libuvc.dll /mingw64/bin/libwinpthread-1.dll
+zip -j hsdaoh_win_release.zip src/*.exe src/*.dll /mingw64/bin/libusb-1.0.dll /mingw64/bin/libuvc.dll /mingw64/bin/libwinpthread-1.dll /mingw64/bin/libFLAC.dll /mingw64/bin/libogg-0.dll
 ```
 
 ### Mac OS X

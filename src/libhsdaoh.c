@@ -52,7 +52,7 @@
 #include <format_convert.h>
 #include <crc.h>
 
-#define DEFAULT_BUFFERS 16
+#define DEFAULT_BUFFERS 96
 
 typedef struct hsdaoh_adapter {
 	uint16_t vid;
@@ -531,8 +531,6 @@ int hsdaoh_close(hsdaoh_dev_t *dev)
 	return 0;
 }
 
-// maybe rename to preferred output format
-// and add real output format to data_info_t
 int hsdaoh_set_output_format(hsdaoh_dev_t *dev, hsdaoh_output_format_t format)
 {
 	if (!dev)
@@ -542,13 +540,14 @@ int hsdaoh_set_output_format(hsdaoh_dev_t *dev, hsdaoh_output_format_t format)
 	return 0;
 }
 
-void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint8_t *data, size_t len)
+void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t srate, uint8_t *data, size_t len)
 {
 	hsdaoh_data_info_t data_info;
 	data_info.ctx = dev->cb_ctx;
 	data_info.stream_id = sid;
 	data_info.buf = data;
 	data_info.len = len;
+	data_info.srate = srate;
 
 	switch (format) {
 		case PIO_8BIT_IQ:
@@ -604,7 +603,7 @@ static void *hsdaoh_output_worker(void *arg)
 		pthread_mutex_unlock(&dev->ll_mutex);
 
 		while (curelem != NULL) {
-			hsdaoh_output(dev, curelem->sid, curelem->format, curelem->data, curelem->len);
+			hsdaoh_output(dev, curelem->sid, curelem->format, curelem->srate, curelem->data, curelem->len);
 
 			prev = curelem;
 			curelem = curelem->next;
@@ -614,7 +613,7 @@ static void *hsdaoh_output_worker(void *arg)
 	}
 }
 
-void hsdaoh_enqueue_data(hsdaoh_dev_t *dev, uint16_t sid, int format, uint8_t *data, size_t len)
+void hsdaoh_enqueue_data(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t srate, uint8_t *data, size_t len)
 {
 	if (dev->async_status != HSDAOH_RUNNING) {
 		free(data);
@@ -626,6 +625,7 @@ void hsdaoh_enqueue_data(hsdaoh_dev_t *dev, uint16_t sid, int format, uint8_t *d
 	rpt->len = len;
 	rpt->sid = sid;
 	rpt->format = format;
+	rpt->srate = srate;
 	rpt->next = NULL;
 
 	pthread_mutex_lock(&dev->ll_mutex);
@@ -721,6 +721,11 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	uint16_t stream0_format = 0;
 	uint8_t *stream0_data = malloc(dev->width-1 * dev->height  * 2);
 
+	if (!stream0_data) {
+		fprintf(stderr, "Out of memory, frame skipped!\n");
+		return;
+	}
+
 	for (unsigned int i = 0; i < dev->height; i++) {
 		uint8_t *line_dat = data + (dev->width * sizeof(uint16_t) * i);
 
@@ -745,6 +750,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 				fprintf(stderr, "Invalid payload length: %d\n", payload_len);
 
 			/* discard frame */
+			free(stream0_data);
 			return;
 		}
 
@@ -770,14 +776,15 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 				stream0_format = format;
 			} else {
 				uint8_t *out_data = malloc(out_len);
+				uint32_t srate = stream_id < DEFAULT_MAX_STREAMS ? meta.stream_info[stream_id].srate : 0;
 				memcpy(out_data, line_dat, out_len);
-				hsdaoh_enqueue_data(dev, stream_id, format, out_data, out_len);
+				hsdaoh_enqueue_data(dev, stream_id, format, srate, out_data, out_len);
 			}
 		}
 	}
 
 	if (dev->stream_synced && stream0_payload_bytes)
-		hsdaoh_enqueue_data(dev, 0, stream0_format, stream0_data, stream0_payload_bytes);
+		hsdaoh_enqueue_data(dev, 0, stream0_format, meta.stream_info[0].srate, stream0_data, stream0_payload_bytes);
 	else
 		free(stream0_data);
 
@@ -788,7 +795,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		dev->frames_since_error++;
 
 	if (!dev->stream_synced && !frame_errors && (dev->in_order_cnt > 4)) {
-		fprintf(stderr, "Syncronized to HDMI input stream\n");
+		fprintf(stderr, "Synchronized to HDMI input stream\n");
 		dev->stream_synced = true;
 	}
 }
@@ -839,7 +846,7 @@ int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx, unsig
 //	dev->output_float = true;
 
 	/* initialize with a threshold */
-	dev->highest_numq = 9;
+	dev->highest_numq = DEFAULT_BUFFERS/2;
 	dev->llbuf_num = (buf_num == 0) ? DEFAULT_BUFFERS : buf_num;
 
 	pthread_mutex_init(&dev->ll_mutex, NULL);

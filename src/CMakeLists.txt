@@ -85,6 +85,7 @@ add_executable(hsdaoh_test hsdaoh_test.c)
 set(INSTALL_TARGETS hsdaoh hsdaoh_static hsdaoh_file hsdaoh_tcp hsdaoh_test)
 
 target_link_libraries(hsdaoh_file hsdaoh
+    ${LIBFLAC_LIBRARIES}
 #    ${LIBUSB_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
 )

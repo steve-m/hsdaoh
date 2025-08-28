@@ -53,6 +53,10 @@ static inline void hsdaoh_16bit_to_float(hsdaoh_dev_t *dev, hsdaoh_data_info_t *
 
 	data_info->buf = (uint8_t *)floats;
 	data_info->len = j * sizeof(float);
+	data_info->bits_per_samp = 32;
+	data_info->nchans = 1;
+	data_info->is_signed = true;
+	data_info->is_float = true;
 	dev->cb(data_info);
 
 	free(floats);
@@ -81,6 +85,11 @@ void hsdaoh_unpack_pio_12bit(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
 	} else {
 		data_info->buf = (uint8_t *)out;
 		data_info->len = j * sizeof(uint16_t);
+		data_info->bits_per_samp = 12;
+		data_info->nchans = 1;
+		data_info->is_signed = false;
+		data_info->is_float = false;
+
 		dev->cb(data_info);
 	}
 
@@ -112,11 +121,18 @@ void hsdaoh_unpack_pio_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_in
 		out16_2[i] = out[i] & 0x0fff;
 	}
 
+	data_info->bits_per_samp = 12;
+	data_info->nchans = 1;
+
 	if (dev->output_float) {
 		hsdaoh_16bit_to_float(dev, data_info, out16_1, i, 2047.5, true);
 	} else {
 		data_info->buf = (uint8_t *)out16_1;
 		data_info->len = i * sizeof(uint16_t);
+		data_info->bits_per_samp = 12;
+		data_info->nchans = 1;
+		data_info->is_signed = false;
+		data_info->is_float = false;
 
 		dev->cb(data_info);
 	}
@@ -157,6 +173,10 @@ void hsdaoh_unpack_pio_8bit_iq(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
 	} else {
 		data_info->buf = (uint8_t *)in;
 		data_info->len = inlen;
+		data_info->bits_per_samp = 8;
+		data_info->nchans = 2;
+		data_info->is_signed = false;
+		data_info->is_float = false;
 
 		dev->cb(data_info);
 	}
@@ -202,6 +222,10 @@ void hsdaoh_unpack_pio_10bit_iq(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info
 	} else {
 		data_info->buf = (uint8_t *)iq_samps;
 		data_info->len = out_samps * sizeof(uint16_t);
+		data_info->bits_per_samp = 10;
+		data_info->nchans = 2;
+		data_info->is_signed = false;
+		data_info->is_float = false;
 
 		dev->cb(data_info);
 	}
@@ -215,14 +239,24 @@ void hsdaoh_unpack_pio_pcm1802_audio(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data
 	uint32_t *in = (uint32_t *)data_info->buf;
 	size_t inlen = data_info->len / sizeof(uint32_t);
 
-	/* convert from S24LE to S32LE */
-	for (unsigned int i = 0; i < inlen; i++)
-		in[i] <<= 8;
+	/* output as S24_3LE */
+	uint8_t *out = malloc(inlen * 3);
+	int j = 0;
 
-	data_info->buf = (uint8_t *)in;
-	data_info->len = inlen * sizeof(uint32_t);
+	for (unsigned int i = 0; i < inlen; i++) {
+		out[j++] = in[i] & 0xff;
+		out[j++] = (in[i] >>  8) & 0xff;
+		out[j++] = (in[i] >> 16) & 0xff;
+	}
 
+	data_info->buf = (uint8_t *)out;
+	data_info->len = j;
+	data_info->bits_per_samp = 24;
+	data_info->nchans = 2;
+	data_info->is_signed = true;
+	data_info->is_float = false;
 	dev->cb(data_info);
+	free(out);
 }
 
 void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
@@ -250,6 +284,10 @@ void hsdaoh_unpack_fpga_12bit_dual(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_i
 	} else {
 		data_info->buf = (uint8_t *)out16_1;
 		data_info->len = j * sizeof(uint16_t);
+		data_info->bits_per_samp = 12;
+		data_info->nchans = 1;
+		data_info->is_signed = false;
+		data_info->is_float = false;
 
 		dev->cb(data_info);
 	}
