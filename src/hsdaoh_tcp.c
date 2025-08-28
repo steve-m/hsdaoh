@@ -39,7 +39,7 @@
 #else
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include "getopt/getopt.h"
+#include <getopt.h>
 #define usleep(t) Sleep((t)/1000)
 #endif
 

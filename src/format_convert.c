@@ -27,6 +27,7 @@
 #include <libusb.h>
 #include <libuvc/libuvc.h>
 #include <iqconverter_float.h>
+#include <pthread.h>
 #include <hsdaoh.h>
 #include <hsdaoh_private.h>
 #include <format_convert.h>

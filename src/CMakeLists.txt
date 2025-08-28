@@ -71,9 +71,6 @@ ENDIF(MSVC)
 # Setup libraries used in executables
 ########################################################################
 if(WIN32)
-add_library(libgetopt_static STATIC
-    getopt/getopt.c
-)
 target_link_libraries(
     hsdaoh
 )
@@ -92,11 +89,9 @@ target_link_libraries(hsdaoh_file hsdaoh
     ${CMAKE_THREAD_LIBS_INIT}
 )
 target_link_libraries(hsdaoh_tcp hsdaoh
-#    ${LIBUSB_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
 )
 target_link_libraries(hsdaoh_test hsdaoh
-#    ${LIBUSB_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
 )
 if(UNIX)
@@ -108,9 +103,7 @@ endif()
 endif()
 
 if(WIN32)
-target_link_libraries(hsdaoh_file libgetopt_static)
-target_link_libraries(hsdaoh_tcp ws2_32 libgetopt_static)
-target_link_libraries(hsdaoh_test libgetopt_static)
+target_link_libraries(hsdaoh_tcp ws2_32)
 set_property(TARGET hsdaoh_file APPEND PROPERTY COMPILE_DEFINITIONS "hsdaoh_STATIC" )
 set_property(TARGET hsdaoh_tcp APPEND PROPERTY COMPILE_DEFINITIONS "hsdaoh_STATIC" )
 set_property(TARGET hsdaoh_test APPEND PROPERTY COMPILE_DEFINITIONS "hsdaoh_STATIC" )

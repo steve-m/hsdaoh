@@ -31,7 +31,7 @@
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
-#include "getopt/getopt.h"
+#include <getopt.h>
 #define usleep(t) Sleep((t)/1000)
 #endif
 
