@@ -168,8 +168,8 @@ static void ppm_test(uint32_t len)
 	static uint64_t interval = 0;
 	static uint64_t nsamples_total = 0;
 	static uint64_t interval_total = 0;
-	struct time_generic ppm_now;
-	static struct time_generic ppm_recent;
+	struct time_generic ppm_now = { 0 };
+	static struct time_generic ppm_recent = { 0 };
 	static enum {
 		PPM_INIT_NO,
 		PPM_INIT_DUMP,
