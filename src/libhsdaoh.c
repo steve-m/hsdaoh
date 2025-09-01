@@ -31,12 +31,9 @@
 #include <stdbool.h>
 #ifndef _WIN32
 #include <unistd.h>
-#include <endian.h>
 #else
 #include <windows.h>
 #define usleep(t) Sleep((t)/1000)
-#define le32toh(x) (x)
-#define le16toh(x) (x)
 #endif
 
 #include <inttypes.h>
@@ -695,7 +692,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	metadata_t meta;
 	hsdaoh_extract_metadata(data, &meta, dev->width);
 
-	if (le32toh(meta.magic) != 0xda7acab1) {
+	if (meta.magic != 0xda7acab1) {
 		if (dev->stream_synced)
 			fprintf(stderr, "Lost sync to HDMI input stream\n");
 
@@ -730,9 +727,9 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		uint8_t *line_dat = data + (dev->width * sizeof(uint16_t) * i);
 
 		/* extract number of payload words from reserved field at end of line */
-		uint16_t payload_len = le16toh(((uint16_t *)line_dat)[dev->width - 1]);
-		uint16_t crc = le16toh(((uint16_t *)line_dat)[dev->width - 2]);
-		uint16_t stream_id = le16toh(((uint16_t *)line_dat)[dev->width - 3]);
+		uint16_t payload_len = ((uint16_t *)line_dat)[dev->width - 1];
+		uint16_t crc = ((uint16_t *)line_dat)[dev->width - 2];
+		uint16_t stream_id = ((uint16_t *)line_dat)[dev->width - 3];
 		uint16_t format = (meta.flags & FLAG_FORMAT_ID_PRESENT) ? stream_id >> 6 : RAW_8BIT;
 
 		if (meta.flags & FLAG_STREAM_ID_PRESENT)
