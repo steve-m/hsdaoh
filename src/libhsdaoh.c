@@ -541,10 +541,15 @@ void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t srate, 
 {
 	hsdaoh_data_info_t data_info;
 	data_info.ctx = dev->cb_ctx;
-	data_info.stream_id = sid;
 	data_info.buf = data;
 	data_info.len = len;
+	data_info.stream_id = sid;
 	data_info.srate = srate;
+	data_info.nchans = 1;
+	data_info.bits_per_samp = 16;
+	data_info.is_signed = false;
+	data_info.is_float = false;
+	data_info.device_error = false;
 
 	switch (format) {
 		case PIO_8BIT_IQ:
