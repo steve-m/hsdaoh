@@ -239,11 +239,14 @@ void hsdaoh_unpack_pio_pcm1802_audio(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data
 	uint32_t *in = (uint32_t *)data_info->buf;
 	size_t inlen = data_info->len / sizeof(uint32_t);
 
-	/* output as S24_3LE */
+	/* output as S24_3LE, also take care of correct R/L mapping */
 	uint8_t *out = malloc(inlen * 3);
 	int j = 0;
 
-	for (unsigned int i = 0; i < inlen; i++) {
+	for (unsigned int i = 0; i < inlen; i += 2) {
+		out[j++] = in[i+1] & 0xff;
+		out[j++] = (in[i+1] >>  8) & 0xff;
+		out[j++] = (in[i+1] >> 16) & 0xff;
 		out[j++] = in[i] & 0xff;
 		out[j++] = (in[i] >>  8) & 0xff;
 		out[j++] = (in[i] >> 16) & 0xff;
