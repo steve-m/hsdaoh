@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -40,7 +41,7 @@
 
 #include "hsdaoh.h"
 
-#define FD_NUMS				4
+#define FD_NUMS				6
 
 static bool do_exit = false;
 static hsdaoh_dev_t *dev = NULL;
@@ -65,7 +66,7 @@ void usage(void)
 #ifdef FLAC__STREAM_ENCODER_SET_NUM_THREADS_OK
 		"\t[-t number of threads for FLAC encoding (default: 4)]\n"
 #endif
-		"\t[-0 to -3 filename of stream 0 to stream 3 (a '-' dumps samples to stdout)]\n"
+		"\t[-0 to -5 filename of stream 0 to stream 5 (a '-' dumps samples to stdout)]\n"
 		"\tfilename (of stream 0) (a '-' dumps samples to stdout)\n\n"
 		"\tFilenames with the extension .flac will enable FLAC encoding\n\n");
 	exit(1);
@@ -232,7 +233,17 @@ int main(int argc, char **argv)
 	bool fname0_used = false;
 	bool have_file = false;
 
-	while ((opt = getopt(argc, argv, "0:1:2:3:d:b:l:t:")) != -1) {
+	while ((opt = getopt(argc, argv, "0:1:2:3:4:5:d:b:l:t:")) != -1) {
+		if (isdigit(opt)) {
+			int num = opt - 0x30;
+			have_file = true;
+			filenames[num] = optarg;
+			if (num == 0)
+				fname0_used = true;
+
+			continue;
+		}
+
 		switch (opt) {
 		case 'd':
 			dev_index = (uint32_t)atoi(optarg);
@@ -246,23 +257,6 @@ int main(int argc, char **argv)
 		case 't':
 			flac_nthreads = atoi(optarg);
 			break;
-		case '0':
-			fname0_used = true;
-			have_file = true;
-			filenames[0] = optarg;
-			break;
-		case '1':
-			have_file = true;
-			filenames[1] = optarg;
-			break;
-		case '2':
-			have_file = true;
-			filenames[2] = optarg;
-			break;
-		case '3':
-			have_file = true;
-			filenames[3] = optarg;
-			break;
 		default:
 			usage();
 			break;
@@ -273,9 +267,8 @@ int main(int argc, char **argv)
 		if (argc <= optind) {
 			if (!have_file)
 				usage();
-		} else {
+		} else
 			filenames[0] = argv[optind];
-		}
 	}
 
 	if (dev_index < 0)

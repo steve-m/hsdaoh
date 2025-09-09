@@ -236,6 +236,7 @@ void hsdaoh_unpack_pio_10bit_iq(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info
 
 void hsdaoh_unpack_pio_pcm1802_audio(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
 {
+	unsigned int i;
 	uint32_t *in = (uint32_t *)data_info->buf;
 	size_t inlen = data_info->len / sizeof(uint32_t);
 
@@ -243,7 +244,7 @@ void hsdaoh_unpack_pio_pcm1802_audio(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data
 	uint8_t *out = malloc(inlen * 3);
 	int j = 0;
 
-	for (unsigned int i = 0; i < inlen; i += 2) {
+	for (i = 0; i < inlen; i += 2) {
 		out[j++] = in[i+1] & 0xff;
 		out[j++] = (in[i+1] >>  8) & 0xff;
 		out[j++] = (in[i+1] >> 16) & 0xff;
@@ -259,6 +260,19 @@ void hsdaoh_unpack_pio_pcm1802_audio(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data
 	data_info->is_signed = true;
 	data_info->is_float = false;
 	dev->cb(data_info);
+
+	/* extract aux info/headswitch signal */
+	for (i = 0; i < inlen; i++)
+		out[i] = in[i] & (1 << 25) ? 0xff : 0;
+
+	data_info->stream_id += 2;
+	data_info->srate *= 2;
+	data_info->len = inlen;
+	data_info->bits_per_samp = 8;
+	data_info->nchans = 1;
+	data_info->is_signed = false;
+	dev->cb(data_info);
+
 	free(out);
 }
 
