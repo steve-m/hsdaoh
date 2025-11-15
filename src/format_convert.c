@@ -32,10 +32,9 @@
 #include <hsdaoh_private.h>
 #include <format_convert.h>
 
-static inline void hsdaoh_16bit_to_float(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info, uint16_t *buf, size_t length, float scale, bool duplicate)
+static inline void hsdaoh_16bit_to_float(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info, uint16_t *buf, size_t length, float scale, bool conv_iq)
 {
 	unsigned int i, j = 0;
-
 	float *floats = malloc(sizeof(float) * dev->width * dev->height * 2 * 2);
 
 	if (!floats)
@@ -44,12 +43,45 @@ static inline void hsdaoh_16bit_to_float(hsdaoh_dev_t *dev, hsdaoh_data_info_t *
 	for (unsigned int i = 0; i < length; i++) {
 		float sample_i = buf[i];
 		floats[j++] = (sample_i - scale) * (1/scale);
-
-		if (duplicate)
-			floats[j++] = (sample_i - scale) * (1/scale);
 	}
 
-//	iqconverter_float_process(dev->cnv_f, (float *) floats, j);
+	if (conv_iq) {
+		if (data_info->stream_id == 0)
+			iqconverter_float_process(dev->cnv_f1, (float *) floats, j);
+		else
+			iqconverter_float_process(dev->cnv_f2, (float *) floats, j);
+	}
+
+	data_info->buf = (uint8_t *)floats;
+	data_info->len = j * sizeof(float);
+	data_info->bits_per_samp = 32;
+	data_info->nchans = 1;
+	data_info->is_signed = true;
+	data_info->is_float = true;
+	dev->cb(data_info);
+
+	free(floats);
+}
+
+static inline void hsdaoh_signed_12bit_to_float(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info, uint16_t *buf, size_t length, float scale, bool conv_iq)
+{
+	unsigned int i, j = 0;
+	float *floats = malloc(sizeof(float) * dev->width * dev->height * 2 * 2);
+
+	if (!floats)
+		return;
+
+	for (unsigned int i = 0; i < length; i++) {
+		int16_t samp = (int16_t)(buf[i] << 4);
+		floats[j++] = (samp >> 4) * (1/scale);
+	}
+
+	if (conv_iq) {
+		if (data_info->stream_id == 0)
+			iqconverter_float_process(dev->cnv_f1, (float *) floats, j);
+		else
+			iqconverter_float_process(dev->cnv_f2, (float *) floats, j);
+	}
 
 	data_info->buf = (uint8_t *)floats;
 	data_info->len = j * sizeof(float);
@@ -95,6 +127,53 @@ void hsdaoh_unpack_pio_12bit(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
 
 	free(out);
 }
+
+// Same format as PIO 12 bit, but with two interleaved ADC channels
+void hsdaoh_unpack_pio_dualchan_12bit(hsdaoh_dev_t *dev, hsdaoh_data_info_t *data_info)
+{
+	uint16_t *in = (uint16_t *)data_info->buf;
+	size_t inlen = data_info->len / sizeof(uint16_t);
+	uint16_t *out16_1 = malloc(sizeof(uint16_t) * dev->width * dev->height);
+	uint16_t *out16_2 = malloc(sizeof(uint16_t) * dev->width * dev->height);
+	unsigned int j = 0;
+
+	for (unsigned int i = 0; i < inlen; i += 3) {
+		out16_1[j  ] = (in[i+2] & 0xf000) >> 4 | (in[i+1] & 0xf000) >> 8 | (in[i] >> 12);
+		out16_2[j++] = in[i  ] & 0x0fff;
+		out16_1[j  ] = in[i+1] & 0x0fff;
+		out16_2[j++] = in[i+2] & 0x0fff;
+	}
+
+	data_info->bits_per_samp = 12;
+	data_info->nchans = 1;
+
+	if (dev->output_float) {
+		hsdaoh_signed_12bit_to_float(dev, data_info, out16_1, j, 2047.5, true);
+	} else {
+		data_info->buf = (uint8_t *)out16_1;
+		data_info->len = j * sizeof(uint16_t);
+		data_info->bits_per_samp = 12;
+		data_info->nchans = 1;
+		data_info->is_signed = true;
+		data_info->is_float = false;
+
+		dev->cb(data_info);
+	}
+
+	data_info->stream_id += 1;
+
+	if (dev->output_float) {
+		hsdaoh_16bit_to_float(dev, data_info, out16_2, j, 2047.5, true);
+	} else {
+		data_info->buf = (uint8_t *)out16_2;
+
+		dev->cb(data_info);
+	}
+
+	free(out16_1);
+	free(out16_2);
+}
+
 
 // We receive three 32-bit words containing four 24-bit samples (sample A - D)
 // First word:  A07 A06 A05 A04 A03 A02 A01 A00 B23 B22 B21 B20 B19 B18 B17 B16 B15 B14 B13 B12 B11 B10 B09 B08 B07 B06 B05 B04 B03 B02 B01 B00

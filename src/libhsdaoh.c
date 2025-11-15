@@ -490,7 +490,8 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 		goto err;
 
 	dev->dev_lost = 0;
-	dev->cnv_f = iqconverter_float_create(HB_KERNEL_FLOAT, HB_KERNEL_FLOAT_LEN);
+	dev->cnv_f1 = iqconverter_float_create(HB_KERNEL_FLOAT, HB_KERNEL_FLOAT_LEN);
+	dev->cnv_f2 = iqconverter_float_create(HB_KERNEL_FLOAT, HB_KERNEL_FLOAT_LEN);
 
 found:
 	*out_dev = dev;
@@ -522,7 +523,8 @@ int hsdaoh_close(hsdaoh_dev_t *dev)
 	uvc_unref_device(dev->uvc_dev);
 	uvc_exit(dev->uvc_ctx);
 
-	iqconverter_float_free(dev->cnv_f);
+	iqconverter_float_free(dev->cnv_f1);
+	iqconverter_float_free(dev->cnv_f2);
 	free(dev);
 
 	return 0;
@@ -563,6 +565,9 @@ void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t srate, 
 			break;
 		case PIO_12BIT_DUAL:
 			hsdaoh_unpack_pio_12bit_dual(dev, &data_info);
+			break;
+		case PIO_DUALCHAN_12BIT:
+			hsdaoh_unpack_pio_dualchan_12bit(dev, &data_info);
 			break;
 		case PIO_PCM1802_AUDIO:
 			hsdaoh_unpack_pio_pcm1802_audio(dev, &data_info);
@@ -837,7 +842,8 @@ int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx, unsig
 	if (HSDAOH_INACTIVE != dev->async_status)
 		return -2;
 
-	iqconverter_float_reset(dev->cnv_f);
+	iqconverter_float_reset(dev->cnv_f1);
+	iqconverter_float_reset(dev->cnv_f2);
 
 	dev->async_status = HSDAOH_RUNNING;
 	dev->async_cancel = 0;
