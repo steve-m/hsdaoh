@@ -47,7 +47,8 @@
 #include <hsdaoh.h>
 #include <hsdaoh_private.h>
 #include <format_convert.h>
-#include <crc.h>
+#include <crc16speed.h>
+#include <crc_simd.h>
 
 #define DEFAULT_BUFFERS 96
 
@@ -493,6 +494,9 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 	dev->cnv_f1 = iqconverter_float_create(HB_KERNEL_FLOAT, HB_KERNEL_FLOAT_LEN);
 	dev->cnv_f2 = iqconverter_float_create(HB_KERNEL_FLOAT, HB_KERNEL_FLOAT_LEN);
 
+	crc16speed_init();
+	crc16_simd_init();
+
 found:
 	*out_dev = dev;
 
@@ -771,7 +775,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 				frame_errors++;
 
 			dev->last_crc[1] = dev->last_crc[0];
-			dev->last_crc[0] = crc16_ccitt(line_dat, dev->width * sizeof(uint16_t));
+			dev->last_crc[0] = crc16_simd(0xffff, line_dat, dev->width * sizeof(uint16_t));
 		}
 
 		if ((payload_len > 0) && dev->stream_synced) {

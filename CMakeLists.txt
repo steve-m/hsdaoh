@@ -62,6 +62,29 @@ elseif(MSVC14 OR MSVC14)
     ADD_DEFINITIONS(-D_TIMESPEC_DEFINED)
 endif()
 
+# Enable SIMD instructions on x86
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|i386|i686")
+    add_compile_options(-mpclmul -msse4.1)
+endif()
+
+########################################################################
+# CRC SIMD specific setup
+########################################################################
+# Enable crypto extensions on ARM64
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+    # Check if using GCC or Clang
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        # GCC requires explicit crypto extension flag on all ARM64 platforms
+        add_compile_options(-march=armv8-a+crypto)
+    elseif(APPLE)
+        # AppleClang on Apple Silicon - use native CPU features
+        add_compile_options(-mcpu=apple-m1)
+    else()
+        # Other Clang on ARM64 Linux
+        add_compile_options(-march=armv8-a+crypto)
+    endif()
+endif()
+
 ########################################################################
 # Find build dependencies
 ########################################################################

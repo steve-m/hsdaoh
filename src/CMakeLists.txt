@@ -18,7 +18,7 @@
 ########################################################################
 # Setup shared library variant
 ########################################################################
-add_library(hsdaoh SHARED libhsdaoh.c format_convert.c iqconverter_float.c)
+add_library(hsdaoh SHARED libhsdaoh.c format_convert.c iqconverter_float.c crcspeed.c crc16speed.c crc_simd.c)
 target_link_libraries(hsdaoh ${LIBUSB_LIBRARIES} ${LIBUVC_LIBRARIES} ${THREADS_PTHREADS_LIBRARY})
 target_include_directories(hsdaoh PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
@@ -86,7 +86,6 @@ set(INSTALL_TARGETS hsdaoh hsdaoh_static hsdaoh_file hsdaoh_tcp hsdaoh_test)
 
 target_link_libraries(hsdaoh_file hsdaoh
     ${LIBFLAC_LIBRARIES}
-#    ${LIBUSB_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
 )
 target_link_libraries(hsdaoh_tcp hsdaoh
