@@ -19,14 +19,8 @@
 ########################################################################
 # Project setup
 ########################################################################
-cmake_minimum_required(VERSION 3.10.0)
-
-# workaround for https://gitlab.kitware.com/cmake/cmake/issues/16967
-if(${CMAKE_VERSION} VERSION_LESS "3.12.0")
-    project(hsdaoh)
-else()
-    project(hsdaoh C)
-endif()
+cmake_minimum_required(VERSION 3.12.0)
+project(hsdaoh C)
 
 #select the release build type by default to get optimization flags
 if(NOT CMAKE_BUILD_TYPE)
@@ -120,6 +114,16 @@ else()
     set(LIBFLAC_LIBRARIES "" CACHE STRING "manual FLAC path")
     set(LIBFLAC_INCLUDE_DIRS "" CACHE STRING "manual FLAC includepath")
 endif()
+
+#find_library(CRCFAST_LIBRARY
+#    NAMES crc_fast
+#    HINTS "${CMAKE_PREFIX_PATH}/"
+#)
+
+find_package(CRCFAST)
+
+
+#MESSAGE(STATUS "CRC: ${CRCFAST_LIBRARY}")
 
 if(MSVC)
     set(THREADS_PTHREADS_LIBRARY "" CACHE STRING "manual pthread-win32 path")

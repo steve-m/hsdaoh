@@ -15,11 +15,38 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+set(HSDAOH_COMMON_SOURCES
+    libhsdaoh.c
+    format_convert.c
+    iqconverter_float.c
+)
+
+if(NOT CRCFAST_FOUND)
+    list(APPEND HSDAOH_COMMON_SOURCES
+        crcspeed.c
+        crc16speed.c
+        crc_simd.c
+    )
+endif()
+
 ########################################################################
 # Setup shared library variant
 ########################################################################
-add_library(hsdaoh SHARED libhsdaoh.c format_convert.c iqconverter_float.c crcspeed.c crc16speed.c crc_simd.c)
-target_link_libraries(hsdaoh ${LIBUSB_LIBRARIES} ${LIBUVC_LIBRARIES} ${THREADS_PTHREADS_LIBRARY})
+add_library(hsdaoh SHARED ${HSDAOH_COMMON_SOURCES})
+
+target_link_libraries(hsdaoh
+    ${LIBUSB_LIBRARIES}
+    ${LIBUVC_LIBRARIES}
+    ${THREADS_PTHREADS_LIBRARY}
+)
+
+if(CRCFAST_FOUND)
+    target_link_libraries(hsdaoh CRCFAST::CRCFAST)
+    target_compile_definitions(hsdaoh PRIVATE HAVE_CRCFAST=1)
+else()
+    target_compile_definitions(hsdaoh PRIVATE HAVE_CRCFAST=0)
+endif()
+
 target_include_directories(hsdaoh PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>  # <prefix>/include
@@ -36,8 +63,22 @@ generate_export_header(hsdaoh)
 ########################################################################
 # Setup static library variant
 ########################################################################
-add_library(hsdaoh_static STATIC libhsdaoh.c format_convert.c iqconverter_float.c)
-target_link_libraries(hsdaoh m ${LIBUSB_LIBRARIES} ${LIBUVC_LIBRARIES} ${THREADS_PTHREADS_LIBRARY})
+add_library(hsdaoh_static STATIC ${HSDAOH_COMMON_SOURCES})
+
+target_link_libraries(hsdaoh_static
+    m
+    ${LIBUSB_LIBRARIES}
+    ${LIBUVC_LIBRARIES}
+    ${THREADS_PTHREADS_LIBRARY}
+)
+
+if(CRCFAST_FOUND)
+    target_link_libraries(hsdaoh_static CRCFAST::CRCFAST)
+    target_compile_definitions(hsdaoh_static PRIVATE HAVE_CRCFAST=1)
+else()
+    target_compile_definitions(hsdaoh_static PRIVATE HAVE_CRCFAST=0)
+endif()
+
 target_include_directories(hsdaoh_static PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>  # <prefix>/include
