@@ -19,14 +19,8 @@
 ########################################################################
 # Project setup
 ########################################################################
-cmake_minimum_required(VERSION 3.10.0)
-
-# workaround for https://gitlab.kitware.com/cmake/cmake/issues/16967
-if(${CMAKE_VERSION} VERSION_LESS "3.12.0")
-    project(hsdaoh)
-else()
-    project(hsdaoh C)
-endif()
+cmake_minimum_required(VERSION 3.12.0)
+project(hsdaoh C)
 
 #select the release build type by default to get optimization flags
 if(NOT CMAKE_BUILD_TYPE)
@@ -62,14 +56,14 @@ elseif(MSVC14 OR MSVC14)
     ADD_DEFINITIONS(-D_TIMESPEC_DEFINED)
 endif()
 
-# Enable SIMD instructions on x86
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|i386|i686")
-    add_compile_options(-mpclmul -msse4.1)
-endif()
-
 ########################################################################
 # CRC SIMD specific setup
 ########################################################################
+# Enable SIMD instructions on x86
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|i386|i686")
+    add_compile_options(-mpclmul -mssse3)
+endif()
+
 # Enable crypto extensions on ARM64
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
     # Check if using GCC or Clang
@@ -120,6 +114,8 @@ else()
     set(LIBFLAC_LIBRARIES "" CACHE STRING "manual FLAC path")
     set(LIBFLAC_INCLUDE_DIRS "" CACHE STRING "manual FLAC includepath")
 endif()
+
+find_package(CRCFAST)
 
 if(MSVC)
     set(THREADS_PTHREADS_LIBRARY "" CACHE STRING "manual pthread-win32 path")

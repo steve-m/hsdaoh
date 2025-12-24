@@ -41,14 +41,19 @@
 #include <libusb.h>
 #include <libuvc/libuvc.h>
 
+#if HAVE_CRCFAST
+#include <libcrc_fast.h>
+#else
+#include <crc16speed.h>
+#include <crc_simd.h>
+#endif
+
 #include <iqconverter_float.h>
 #include <filters.h>
 
 #include <hsdaoh.h>
 #include <hsdaoh_private.h>
 #include <format_convert.h>
-#include <crc16speed.h>
-#include <crc_simd.h>
 
 #define DEFAULT_BUFFERS 96
 
@@ -494,8 +499,10 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 	dev->cnv_f1 = iqconverter_float_create(HB_KERNEL_FLOAT, HB_KERNEL_FLOAT_LEN);
 	dev->cnv_f2 = iqconverter_float_create(HB_KERNEL_FLOAT, HB_KERNEL_FLOAT_LEN);
 
+#if HAVE_CRCFAST == 0
 	crc16speed_init();
 	crc16_simd_init();
+#endif
 
 found:
 	*out_dev = dev;
@@ -692,6 +699,15 @@ inline int hsdaoh_check_idle_cnt(hsdaoh_dev_t *dev, uint16_t *buf, size_t length
 	return idle_counter_errors;
 }
 
+inline uint16_t crc16(uint8_t *buf, unsigned int len)
+{
+#if HAVE_CRCFAST
+	return (uint16_t)crc_fast_checksum(Crc16Ibm3740, (const char *)buf, len);
+#else
+	return crc16_simd(0xffff, buf, len);
+#endif
+}
+
 /* Extract the metadata stored in the upper 4 bits of the last word of each line */
 inline void hsdaoh_extract_metadata(uint8_t *data, metadata_t *metadata, unsigned int width)
 {
@@ -775,7 +791,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 				frame_errors++;
 
 			dev->last_crc[1] = dev->last_crc[0];
-			dev->last_crc[0] = crc16_simd(0xffff, line_dat, dev->width * sizeof(uint16_t));
+			dev->last_crc[0] = crc16(line_dat, dev->width * sizeof(uint16_t));
 		}
 
 		if ((payload_len > 0) && dev->stream_synced) {
