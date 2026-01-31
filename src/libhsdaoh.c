@@ -699,7 +699,7 @@ inline int hsdaoh_check_idle_cnt(hsdaoh_dev_t *dev, uint16_t *buf, size_t length
 	return idle_counter_errors;
 }
 
-inline uint16_t crc16(uint8_t *buf, unsigned int len)
+static inline uint16_t hsdaoh_crc16(uint8_t *buf, unsigned int len)
 {
 #if HAVE_CRCFAST
 	return (uint16_t)crc_fast_checksum(Crc16Ibm3740, (const char *)buf, len);
@@ -791,7 +791,7 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 				frame_errors++;
 
 			dev->last_crc[1] = dev->last_crc[0];
-			dev->last_crc[0] = crc16(line_dat, dev->width * sizeof(uint16_t));
+			dev->last_crc[0] = hsdaoh_crc16(line_dat, dev->width * sizeof(uint16_t));
 		}
 
 		if ((payload_len > 0) && dev->stream_synced) {
