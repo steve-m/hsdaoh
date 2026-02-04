@@ -37,7 +37,7 @@ add_library(hsdaoh SHARED ${HSDAOH_COMMON_SOURCES})
 target_link_libraries(hsdaoh
     ${LIBUSB_LIBRARIES}
     ${LIBUVC_LIBRARIES}
-    ${THREADS_PTHREADS_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
 )
 
 if(CRCFAST_FOUND)
@@ -52,7 +52,6 @@ target_include_directories(hsdaoh PUBLIC
   $<INSTALL_INTERFACE:include>  # <prefix>/include
   ${LIBUSB_INCLUDE_DIRS}
   ${LIBUVC_INCLUDE_DIRS}
-  ${THREADS_PTHREADS_INCLUDE_DIR}
   )
 set_target_properties(hsdaoh PROPERTIES DEFINE_SYMBOL "hsdaoh_EXPORTS")
 set_target_properties(hsdaoh PROPERTIES OUTPUT_NAME hsdaoh)
@@ -69,7 +68,7 @@ target_link_libraries(hsdaoh_static
     m
     ${LIBUSB_LIBRARIES}
     ${LIBUVC_LIBRARIES}
-    ${THREADS_PTHREADS_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
 )
 
 if(CRCFAST_FOUND)
@@ -84,7 +83,6 @@ target_include_directories(hsdaoh_static PUBLIC
   $<INSTALL_INTERFACE:include>  # <prefix>/include
   ${LIBUSB_INCLUDE_DIRS}
   ${LIBUVC_INCLUDE_DIRS}
-  ${THREADS_PTHREADS_INCLUDE_DIR}
   )
 set_property(TARGET hsdaoh_static APPEND PROPERTY COMPILE_DEFINITIONS "hsdaoh_STATIC" )
 set_property(TARGET hsdaoh_static PROPERTY POSITION_INDEPENDENT_CODE ON)

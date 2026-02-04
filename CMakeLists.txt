@@ -51,9 +51,6 @@ if(CMAKE_COMPILER_IS_GNUCC AND NOT WIN32)
     ADD_DEFINITIONS(-Wsign-compare)
     #http://gcc.gnu.org/wiki/Visibility
     add_definitions(-fvisibility=hidden)
-elseif(MSVC14 OR MSVC14)
-#pthread-w32 issue, timespec is now part of time.h
-    ADD_DEFINITIONS(-D_TIMESPEC_DEFINED)
 endif()
 
 ########################################################################
@@ -116,14 +113,6 @@ else()
 endif()
 
 find_package(CRCFAST)
-
-if(MSVC)
-    set(THREADS_PTHREADS_LIBRARY "" CACHE STRING "manual pthread-win32 path")
-    set(THREADS_PTHREADS_INCLUDE_DIR "" CACHE STRING "manual pthread-win32 includepath")
-else()
-    set(THREADS_PTHREADS_LIBRARY "" CACHE INTERNAL "manual pthread-win32 path")
-    set(THREADS_PTHREADS_INCLUDE_DIR "" CACHE INTERNAL "manual pthread-win32 includepath")
-endif()
 
 if(PKG_CONFIG_FOUND AND NOT LIBUSB_FOUND)
     message(FATAL_ERROR "LibUSB 1.0 required to compile hsdaoh")
