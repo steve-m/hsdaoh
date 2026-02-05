@@ -7,7 +7,6 @@
  * PCLMULQDQ Instruction" whitepaper and Intel ISA-L implementation.
  *
  * Supports:
- * - CRC64-Jones: polynomial 0xad93d23594c935a9 (reflected)
  * - CRC16-CCITT: polynomial 0x1021 (non-reflected)
  *
  * References:
@@ -74,35 +73,6 @@ bool crc_simd_available(void) {
 }
 
 /* ============================================================================
- * CRC64 Jones Polynomial: 0xad93d23594c935a9 (reflected)
- *
- * Constants from Intel ISA-L crc64_jones_refl_by8.asm
- * ============================================================================
- */
-
-/* 16-byte folding constants */
-#define CRC64_RK1 UINT64_C(0x381d0015c96f4444)
-#define CRC64_RK2 UINT64_C(0xd9d7be7d505da32c)
-
-/* 128-byte folding constants */
-#define CRC64_RK3 UINT64_C(0x768361524d29ed0b)
-#define CRC64_RK4 UINT64_C(0xcc26fa7c57f8054c)
-
-/* 8-way reduction constants */
-#define CRC64_RK9 UINT64_C(0x5bc94ba8e2087636)
-#define CRC64_RK10 UINT64_C(0x6cf09c8f37710b75)
-#define CRC64_RK11 UINT64_C(0x3885fd59e440d95a)
-#define CRC64_RK12 UINT64_C(0xbccba3936411fb7e)
-#define CRC64_RK13 UINT64_C(0xe4dd0d81cbfce585)
-#define CRC64_RK14 UINT64_C(0xb715e37b96ed8633)
-#define CRC64_RK15 UINT64_C(0xf49784a634f014e4)
-#define CRC64_RK16 UINT64_C(0xaf86efb16d9ab4fb)
-#define CRC64_RK17 UINT64_C(0x7b3211a760160db8)
-#define CRC64_RK18 UINT64_C(0xa062b2319d66692f)
-#define CRC64_RK19 UINT64_C(0xef3d1d18ed889ed2)
-#define CRC64_RK20 UINT64_C(0x6ba4d760ab38201e)
-
-/* ============================================================================
  * CRC16-CCITT Polynomial: 0x1021 (non-reflected)
  *
  * Constants computed by gen_constants.c
@@ -142,13 +112,6 @@ bool crc_simd_available(void) {
 
 #if defined(ARCH_X86)
 
-/* Helper: fold one 128-bit block for CRC64 (reflected) */
-static inline __m128i fold_128(__m128i acc, __m128i data, __m128i k1k2) {
-    __m128i t1 = _mm_clmulepi64_si128(acc, k1k2, 0x00);
-    __m128i t2 = _mm_clmulepi64_si128(acc, k1k2, 0x11);
-    return _mm_xor_si128(_mm_xor_si128(t1, t2), data);
-}
-
 /* Helper: byte-swap a 128-bit register (used for CRC16 non-reflected) */
 __attribute__((unused)) static inline __m128i bswap_128(__m128i x) {
     const __m128i mask =
@@ -170,10 +133,6 @@ fold_128_16(__m128i acc, __m128i data, __m128i k1k2) {
     __m128i t1 = _mm_clmulepi64_si128(acc, k1k2, 0x10); /* acc_lo * k1 */
     __m128i t2 = _mm_clmulepi64_si128(acc, k1k2, 0x01); /* acc_hi * k2 */
     return _mm_xor_si128(_mm_xor_si128(t1, t2), data);
-}
-
-void crc64_simd_init(void) {
-    crc_simd_available();
 }
 
 /* ============================================================================
@@ -314,10 +273,6 @@ static inline uint8x16_t bswap_128_neon(uint8x16_t x) {
 }
 #endif
 
-void crc64_simd_init(void) {
-    crc_simd_available();
-}
-
 /* ============================================================================
  * CRC16 SIMD Implementation for ARM64
  *
@@ -436,14 +391,6 @@ void crc16_simd_init(void) {
 #else /* No SIMD support */
 
 bool crc_simd_available(void);
-
-uint64_t crc64_simd(uint64_t crc, const void *data, uint64_t len) {
-    extern uint64_t crc64speed(uint64_t crc, const void *s, const uint64_t l);
-    return crc64speed(crc, data, len);
-}
-
-void crc64_simd_init(void) {
-}
 
 uint16_t crc16_simd(uint16_t crc, const void *data, uint64_t len) {
     extern uint16_t crc16speed(uint16_t crc, const void *s, const uint64_t l);
