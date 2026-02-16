@@ -25,6 +25,7 @@ struct hsdaoh_dev {
 	int async_cancel;
 	uint16_t vid;
 	uint16_t pid;
+	bool is_ms213xs;
 
 	/* UVC related */
 	uvc_context_t *uvc_ctx;
@@ -37,6 +38,7 @@ struct hsdaoh_dev {
 	int frames_since_error;
 	int discard_start_frames;
 	unsigned int in_order_cnt;
+	uint32_t uvc_frame_count;
 	uint16_t last_frame_cnt;
 	uint16_t last_crc[2];
 	uint16_t idle_cnt;

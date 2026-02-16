@@ -1,7 +1,7 @@
 /*
  * hsdaoh - High Speed Data Acquisition over MS213x USB3 HDMI capture sticks
  *
- * Copyright (C) 2024 by Steve Markgraf <steve@steve-m.de>
+ * Copyright (C) 2024-2026 by Steve Markgraf <steve@steve-m.de>
  *
  * portions based on librtlsdr:
  * Copyright (C) 2012-2014 by Steve Markgraf <steve@steve-m.de>
@@ -61,12 +61,15 @@ typedef struct hsdaoh_adapter {
 	uint16_t vid;
 	uint16_t pid;
 	const char *name;
+	bool is_ms213xs;
 } hsdaoh_adapter_t;
 
 static hsdaoh_adapter_t known_devices[] = {
-	{ 0x345f, 0x2130, "MS2130" },
-	{ 0x534d, 0x2130, "MS2130 OEM" },
-	{ 0x345f, 0x2131, "MS2131" },
+	{ 0x345f, 0x2130, "MS2130",	false },
+	{ 0x534d, 0x2130, "MS2130 OEM",	false },
+	{ 0x345f, 0x2131, "MS2131",	false },
+	{ 0x345f, 0x2132, "MS2130S",	true },
+	{ 0x345f, 0x2133, "MS2131S",	true },
 };
 
 enum crc_config {
@@ -104,7 +107,7 @@ typedef struct
 
 #define CTRL_TIMEOUT	300
 
-int hsdaoh_get_hid_feature_report(hsdaoh_dev_t *dev, unsigned char *data, size_t length)
+static int hsdaoh_get_hid_feature_report(hsdaoh_dev_t *dev, unsigned char *data, size_t length)
 {
 	int report_number = data[0];
 
@@ -116,7 +119,7 @@ int hsdaoh_get_hid_feature_report(hsdaoh_dev_t *dev, unsigned char *data, size_t
 		CTRL_TIMEOUT);
 }
 
-int hsdaoh_send_hid_feature_report(hsdaoh_dev_t *dev, const unsigned char *data, size_t length)
+static int hsdaoh_send_hid_feature_report(hsdaoh_dev_t *dev, const unsigned char *data, size_t length)
 {
 	int report_number = data[0];
 
@@ -128,7 +131,7 @@ int hsdaoh_send_hid_feature_report(hsdaoh_dev_t *dev, const unsigned char *data,
 		CTRL_TIMEOUT);
 }
 
-int hsdaoh_ms_write_register(hsdaoh_dev_t *dev, uint16_t addr, uint8_t val)
+static int hsdaoh_ms213x_write_reg(hsdaoh_dev_t *dev, uint16_t addr, uint8_t val)
 {
 	uint8_t cmd[8] = { 0xb6, (addr >> 8), (addr & 0xff), val,
 			   0x00, 0x00, 0x00, 0x00 };
@@ -136,21 +139,46 @@ int hsdaoh_ms_write_register(hsdaoh_dev_t *dev, uint16_t addr, uint8_t val)
 	return hsdaoh_send_hid_feature_report(dev, cmd, sizeof(cmd));
 }
 
-int hsdaoh_read_register(hsdaoh_dev_t *dev, uint16_t addr, uint8_t *val)
+static int hsdaoh_ms213x_read_reg(hsdaoh_dev_t *dev, uint16_t addr, uint8_t *val)
 {
 	int r = 0;
+	uint8_t resp[8];
 	uint8_t cmd[8] = { 0xb5, (addr >> 8), (addr & 0xff), 0x00,
 			   0x00, 0x00, 0x00, 0x00 };
-	uint8_t resp[8];
 
 	r = hsdaoh_send_hid_feature_report(dev, cmd, sizeof(cmd));
 	if (r < 0)
 		return r;
 
 	r = hsdaoh_get_hid_feature_report(dev, resp, sizeof(resp));
-
 	if (val)
 		*val = resp[3];
+
+	return r;
+}
+
+static int hsdaoh_ms213xs_write_reg(hsdaoh_dev_t *dev, uint16_t addr, uint8_t val)
+{
+	uint8_t cmd[9] = { 0x01, 0xb6, (addr >> 8), (addr & 0xff), val,
+			   0x00, 0x00, 0x00, 0x00 };
+
+	return hsdaoh_send_hid_feature_report(dev, cmd, sizeof(cmd));
+}
+
+static int hsdaoh_ms213xs_read_reg(hsdaoh_dev_t *dev, uint16_t addr, uint8_t *val)
+{
+	int r = 0;
+	uint8_t resp[64];
+	uint8_t cmd[9] = { 0x01, 0xb5, (addr >> 8), (addr & 0xff), 0x00,
+			   0x00, 0x00, 0x00, 0x00 };
+
+	r = hsdaoh_send_hid_feature_report(dev, cmd, sizeof(cmd));
+	if (r < 0)
+		return r;
+
+	r = hsdaoh_get_hid_feature_report(dev, resp, sizeof(resp));
+	if (val)
+		*val = resp[4];
 
 	return r;
 }
@@ -167,57 +195,85 @@ int hsdaoh_write_edid_cmd_data(hsdaoh_dev_t *dev, uint8_t *data, uint8_t len)
 		dev->edid_seq_cnt = 1;
 
 	/* disable I2C access to EDID RAM, reading via I2C will result in a NAK */
-	hsdaoh_ms_write_register(dev, 0xf063, 0x00);
+	hsdaoh_ms213x_write_reg(dev, 0xf063, 0x00);
 
 	/* switch EDID RAM to 8051 */
-	hsdaoh_ms_write_register(dev, 0xf062, 0x80);
+	hsdaoh_ms213x_write_reg(dev, 0xf062, 0x80);
 
 	/* store header with sequence counter and length of data */
-	hsdaoh_ms_write_register(dev, 0xf900, dev->edid_seq_cnt);
-	hsdaoh_ms_write_register(dev, 0xf901, len);
+	hsdaoh_ms213x_write_reg(dev, 0xf900, dev->edid_seq_cnt);
+	hsdaoh_ms213x_write_reg(dev, 0xf901, len);
 
 	/* store actual data to the EDID RAM */
 	for (uint8_t i = 0; i < len; i++)
-		hsdaoh_ms_write_register(dev, 0xf902 + i, data[i]);
+		hsdaoh_ms213x_write_reg(dev, 0xf902 + i, data[i]);
 
 	/* switch EDID RAM to DDC I2C slave */
-	hsdaoh_ms_write_register(dev, 0xf062, 0x00);
+	hsdaoh_ms213x_write_reg(dev, 0xf062, 0x00);
 
 	/* re-enable I2C access to EDID RAM */
-	hsdaoh_ms_write_register(dev, 0xf063, 0x08);
+	hsdaoh_ms213x_write_reg(dev, 0xf063, 0x08);
 
 	return 0;
 }
 
 /* Switch the MS2130 to a transparent mode, YUYV data received via HDMI
  * will be passed through unmodified */
-void hsdaoh_ms_enable_transparent_mode(hsdaoh_dev_t *dev)
+static void hsdaoh_ms213x_transparent_mode(hsdaoh_dev_t *dev)
 {
 	/* Note: those registers and settings have been
 	 * found by try and error and observing changes to the output:
 	 * no warranty! */
 
 	/* force YCbCr 4:2:2/YUV input, default is 0x04 (RGB) */
-	hsdaoh_ms_write_register(dev, 0xf039, 0x00);
-	hsdaoh_ms_write_register(dev, 0xf030, 0x02);
+	hsdaoh_ms213x_write_reg(dev, 0xf039, 0x00);
+	hsdaoh_ms213x_write_reg(dev, 0xf030, 0x02);
 
 	/* disable sharpening */
-	hsdaoh_ms_write_register(dev, 0xf6b0, 0x00);
+	hsdaoh_ms213x_write_reg(dev, 0xf6b0, 0x00);
 
 	/* disable luma processing -> UVC brightness/contrast control has no effect anymore */
-	hsdaoh_ms_write_register(dev, 0xf6be, 0x11);
+	hsdaoh_ms213x_write_reg(dev, 0xf6be, 0x11);
 
 	/* disable chroma processing -> UVC hue/saturation control has no effect anymore */
-	hsdaoh_ms_write_register(dev, 0xf6bf, 0x11);
+	hsdaoh_ms213x_write_reg(dev, 0xf6bf, 0x11);
 
-	/* disable luma horizontal scaling/subpixel interpolation */
-	hsdaoh_ms_write_register(dev, 0xf65c, 0x10);
+	/* disable horizontal rescaling */
+	hsdaoh_ms213x_write_reg(dev, 0xf65c, 0x10);
 
-	/* disable luma vertical scaling/subpixel interpolation */
-	hsdaoh_ms_write_register(dev, 0xf65e, 0x10);
+	/* disable vertical rescaling */
+	hsdaoh_ms213x_write_reg(dev, 0xf65e, 0x10);
 
 	/* disable chroma interpolation */
-	hsdaoh_ms_write_register(dev, 0xf600, 0x80);
+	hsdaoh_ms213x_write_reg(dev, 0xf600, 0x80);
+}
+
+/* Switch the MS2130S to a transparent mode, YUYV data received via HDMI
+ * will be passed through unmodified */
+static void hsdaoh_ms213xs_transparent_mode(hsdaoh_dev_t *dev, bool reinit)
+{
+	/* Note: those registers and settings have been
+	 * found by try and error and observing changes to the output:
+	 * no warranty! */
+
+	/* force YCbCr 4:2:2/YUV input, default is 0x04 (RGB) */
+	hsdaoh_ms213xs_write_reg(dev, 0xf130, 0x12);
+
+	/* disable sharpening */
+	hsdaoh_ms213xs_write_reg(dev, 0xfc80, 0x00);
+
+	/* disable luma processing -> UVC brightness/contrast control has no effect anymore */
+	hsdaoh_ms213xs_write_reg(dev, 0xfc8e, 0x11);
+
+	/* disable chroma processing -> UVC hue/saturation control has no effect anymore */
+	hsdaoh_ms213xs_write_reg(dev, 0xfc8f, 0x11);
+
+	if (reinit)
+		return;
+
+	/* disable chroma interpolation */
+	hsdaoh_ms213xs_write_reg(dev, 0xf618, 0x11);
+	hsdaoh_ms213xs_write_reg(dev, 0xf135, 0x0a);
 }
 
 int hsdaoh_get_usb_strings(hsdaoh_dev_t *dev, char *manufact, char *product,
@@ -351,7 +407,7 @@ const char *hsdaoh_get_device_name(uint32_t index)
  * Thus, we need to manually claim the interface and clear the halted EP
  * before we open the device with libuvc...
  */
-int hsdaoh_clear_endpoint_halt(hsdaoh_dev_t *dev)
+static int hsdaoh_clear_endpoint_halt(hsdaoh_dev_t *dev)
 {
 	int r;
 
@@ -379,7 +435,7 @@ int hsdaoh_clear_endpoint_halt(hsdaoh_dev_t *dev)
 	return libusb_release_interface(dev->devh, 1);
 }
 
-int _hsdaoh_open_uvc_device(hsdaoh_dev_t *dev)
+static int _hsdaoh_open_uvc_device(hsdaoh_dev_t *dev)
 {
 	uvc_error_t r;
 
@@ -415,6 +471,7 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 	libusb_device **list;
 	hsdaoh_dev_t *dev = NULL;
 	libusb_device *device = NULL;
+	hsdaoh_adapter_t *adapter = NULL;
 	uint32_t device_count = 0;
 	struct libusb_device_descriptor dd;
 	uint8_t reg;
@@ -435,15 +492,13 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 	dev->dev_lost = 1;
 
 	cnt = libusb_get_device_list(dev->ctx, &list);
-
 	for (i = 0; i < cnt; i++) {
 		device = list[i];
 
 		libusb_get_device_descriptor(list[i], &dd);
-
-		if (find_known_device(dd.idVendor, dd.idProduct)) {
+		adapter = find_known_device(dd.idVendor, dd.idProduct);
+		if (adapter)
 			device_count++;
-		}
 
 		if (index == device_count - 1)
 			break;
@@ -460,7 +515,9 @@ int hsdaoh_open(hsdaoh_dev_t **out_dev, uint32_t index)
 	if (!device) {
 		r = -1;
 		goto err;
-	}
+	} else if (adapter)
+		dev->is_ms213xs = adapter->is_ms213xs;
+
 
 	r = _hsdaoh_open_uvc_device(dev);
 	if (r < 0) {
@@ -550,7 +607,7 @@ int hsdaoh_set_output_format(hsdaoh_dev_t *dev, hsdaoh_output_format_t format)
 	return 0;
 }
 
-void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t srate, uint8_t *data, size_t len)
+static void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t srate, uint8_t *data, size_t len)
 {
 	hsdaoh_data_info_t data_info;
 	data_info.ctx = dev->cb_ctx;
@@ -631,7 +688,7 @@ static void *hsdaoh_output_worker(void *arg)
 	}
 }
 
-void hsdaoh_enqueue_data(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t srate, uint8_t *data, size_t len)
+static void hsdaoh_enqueue_data(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t srate, uint8_t *data, size_t len)
 {
 	if (dev->async_status != HSDAOH_RUNNING) {
 		free(data);
@@ -717,7 +774,7 @@ inline void hsdaoh_extract_metadata(uint8_t *data, metadata_t *metadata, unsigne
 		meta[i/2] = (data[((i+1)*width*2) - 1] >> 4) | (data[((i+2)*width*2) - 1] & 0xf0);
 }
 
-void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
+static void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 {
 	metadata_t meta;
 	hsdaoh_extract_metadata(data, &meta, dev->width);
@@ -827,9 +884,13 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	}
 }
 
-void _uvc_callback(uvc_frame_t *frame, void *ptr)
+static void _hsdaoh_uvc_callback(uvc_frame_t *frame, void *ptr)
 {
 	hsdaoh_dev_t *dev = (hsdaoh_dev_t *)ptr;
+	if (!dev)
+		return;
+
+	dev->uvc_frame_count++;
 
 	if (frame->frame_format != UVC_COLOR_FORMAT_YUYV) {
 		fprintf(stderr, "Error: incorrect frame format!\n");
@@ -843,13 +904,22 @@ void _uvc_callback(uvc_frame_t *frame, void *ptr)
 	if (dev->discard_start_frames) {
 		dev->discard_start_frames--;
 
-		if (dev->discard_start_frames == 5)
-			hsdaoh_ms_enable_transparent_mode(dev);
+		if (dev->discard_start_frames == 5) {
+			if (dev->is_ms213xs)
+				hsdaoh_ms213xs_transparent_mode(dev, false);
+			else
+				hsdaoh_ms213x_transparent_mode(dev);
+		}
 
 		return;
 	}
 
 	hsdaoh_process_frame(dev, (uint8_t *)frame->data, frame->data_bytes);
+
+	/* periodically reinit MS2130S, as the firmware is resetting the registers
+	 * in case of a video source disconnection */
+	if (!dev->stream_synced && dev->is_ms213xs && !(dev->uvc_frame_count % 30))
+		hsdaoh_ms213xs_transparent_mode(dev, true);
 }
 
 int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx, unsigned int buf_num)

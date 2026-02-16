@@ -1,6 +1,6 @@
 # hsdaoh - High Speed Data Acquisition over HDMI
 
-This project aims to (ab)use cheap USB 3.0 HDMI capture sticks based on the MacroSilicon MS2130 as a general purpose USB interface.
+This project aims to (ab)use cheap USB 3.0 HDMI capture sticks based on the MacroSilicon MS2130/MS2130S as a general purpose USB interface.
 
 In combination with small FPGA boards with HDMI interface like the Tang Nano series, it can be used to capture high speed data streams from an external data source like an ADC, do-it-yourself SDR, or simply build a high speed logic analyzer.
 Furthermore, instead of an FPGA board, the Raspberry Pi RP2350 also can be used, see [hsdaoh-rp2350](https://github.com/steve-m/hsdaoh-rp2350).
@@ -15,10 +15,12 @@ The hardware design files of the hsdaohSDR prototype shown in the talk can be fo
 
 You need at least two pieces of hardware:
 
-### HDMI Capture device based on MS2130 or MS2131
+### HDMI Capture device based on MS2130(S) or MS2131(S)
 There are many sources for those devices, ranging from Aliexpress to Amazon or maybe even your local hardware retailer, the price is typically around USD 10. Simply search for MS2130.
-Just make sure that it is marked as a real USB 3.0 device (most of them are marked as "U3" on the case), as cheaper sticks use the older MS2109 chip which is USB 2.0 only.
+Just make sure that it is marked as a real USB 3.0 device (most of them are marked as "4K 30Hz U3" and on the case), as cheaper sticks use the older MS2109 chip which is USB 2.0 only.
 Recently some fake sticks surfaced, for example being sold under the "Lemorele" brand - make sure to avoid these. Advertised as MS2130, they instead contained a USB 2.0 only AM8352 chip (VID/PID 1d1:f115).
+Since mid-2025 a newer version of the chips with 'S' prefix is available (MS2130S and MS2131S), which are supported as well. Typically they are marked as "4K 60Hz U3 PLUS"on the case and support XRGB and NV12.
+This variant might provide a higher datarate in the future, as they allow to capture raw RGB video, and it might thus be possible to make use of the third TMDS channel for hsdaoh.
 
 ### FPGA board with HDMI out
 The main target are currently the Tang Nano series of boards (4K, 9K and 20K). The Tang Primer boards as well as the EBAZ4205 also have been tested.
@@ -28,7 +30,7 @@ With [hsdaoh-rp2350](https://github.com/steve-m/hsdaoh-rp2350), it is possible t
 
 ## First run
 
-- Please follow the instructions at https://github.com/steve-m/hsdaoh-fpga to get an example design running on your FPGA.
+- Please follow the instructions at https://github.com/steve-m/hsdaoh-fpga to get an example design running on your FPGA (or look at the instructions of hsdaoh-rp2350 in case of using the Pico2)
 - Follow the instructions below to get hsdaoh running on your computer.
 - Then connect your FPGA board to the HDMI grabber and make sure you can see actual video output.
 - You then can use hsdaoh_test to verify the counter values being output by the FPGA.
