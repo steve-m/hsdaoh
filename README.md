@@ -19,14 +19,15 @@ You need at least two pieces of hardware:
 There are many sources for those devices, ranging from Aliexpress to Amazon or maybe even your local hardware retailer, the price is typically around USD 10. Simply search for MS2130.
 Just make sure that it is marked as a real USB 3.0 device (most of them are marked as "4K 30Hz U3" and on the case), as cheaper sticks use the older MS2109 chip which is USB 2.0 only.
 Recently some fake sticks surfaced, for example being sold under the "Lemorele" brand - make sure to avoid these. Advertised as MS2130, they instead contained a USB 2.0 only AM8352 chip (VID/PID 1d1:f115).
-Since mid-2025 a newer version of the chips with 'S' prefix is available (MS2130S and MS2131S), which are supported as well. Typically they are marked as "4K 60Hz U3 PLUS"on the case and support XRGB and NV12.
+
+Since mid-2025 a newer version of the chips with 'S' prefix is available (MS2130S and MS2131S), which are supported as well. Typically they are marked as "4K 60Hz U3 PLUS" on the case and support XRGB and NV12.
 This variant might provide a higher datarate in the future, as they allow to capture raw RGB video, and it might thus be possible to make use of the third TMDS channel for hsdaoh.
 
 ### FPGA board with HDMI out
 The main target are currently the Tang Nano series of boards (4K, 9K and 20K). The Tang Primer boards as well as the EBAZ4205 also have been tested.
 
 ### Alternatively: A Raspberry Pi RP2350 based board
-With [hsdaoh-rp2350](https://github.com/steve-m/hsdaoh-rp2350), it is possible to reach transfer rates of up to 75 MByte/s, and the PIO state machines offer a flexible interface for connecting external data sources.
+With [hsdaoh-rp2350](https://github.com/steve-m/hsdaoh-rp2350), it is possible to reach transfer rates of up to 175 MByte/s, and the PIO state machines offer a flexible interface for connecting external data sources.
 
 ## First run
 
