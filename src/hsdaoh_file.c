@@ -320,10 +320,14 @@ int main(int argc, char **argv)
 
 	r = hsdaoh_start_stream(dev, hsdaoh_callback, (void *)&f, num_bufs);
 
-	while (!do_exit)
+	while (!do_exit && !r)
 		usleep(50000);
 
-	fprintf(stderr, "\nUser cancel, exiting...\n");
+	if (do_exit)
+		fprintf(stderr, "\nUser cancel, exiting...\n");
+	else
+		fprintf(stderr, "\nLibrary error %d, exiting...\n", r);
+
 	hsdaoh_close(dev);
 
 	for (int i = 0; i < FD_NUMS; i++) {

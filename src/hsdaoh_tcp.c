@@ -473,7 +473,7 @@ int main(int argc, char **argv)
 		pthread_attr_destroy(&attr);
 
 		r = hsdaoh_start_stream(dev, hsdaoh_callback, NULL, 0);
-		while (!do_exit) {
+		while (!do_exit && !r) {
 			usleep(50000);
 		}
 
@@ -492,6 +492,9 @@ int main(int argc, char **argv)
 			free(prev->data);
 			free(prev);
 		}
+
+		if (do_exit || r)
+			goto out;
 
 		do_exit = 0;
 		global_numq = 0;

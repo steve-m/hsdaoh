@@ -854,8 +854,6 @@ void _uvc_callback(uvc_frame_t *frame, void *ptr)
 
 int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx, unsigned int buf_num)
 {
-	int r = 0;
-
 	if (!dev)
 		return -1;
 
@@ -883,8 +881,12 @@ int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx, unsig
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-	r = pthread_create(&dev->hsdaoh_output_worker_thread, &attr, hsdaoh_output_worker, (void *)dev);
+	int r = pthread_create(&dev->hsdaoh_output_worker_thread, &attr, hsdaoh_output_worker, (void *)dev);
 	pthread_attr_destroy(&attr);
+	if (r < 0) {
+		fprintf(stderr, "Failed to create worker thread!\n");
+		return r;
+	}
 
 	uvc_error_t res;
 	uvc_stream_ctrl_t ctrl;
@@ -898,19 +900,22 @@ int hsdaoh_start_stream(hsdaoh_dev_t *dev, hsdaoh_read_cb_t cb, void *ctx, unsig
 	dev->fps = 60;
 
 	res = uvc_get_stream_ctrl_format_size(dev->uvc_devh, &ctrl, frame_format, dev->width, dev->height, dev->fps);
-
-	if (res < 0) {
+	if (res == UVC_ERROR_INVALID_MODE) {
+		fprintf(stderr, "The required video mode is not available, probably due to the device being "
+				"connected to a USB 2.0 port.\nPlease connect to a USB 3.0 port. If using a "
+				"USB-C to USB-A adapter, you might need to flip the USB-C connector.\n");
+	} else if (res < 0) {
 		uvc_perror(res, "get_mode"); /* device doesn't provide a matching stream */
 	} else {
 		/* start the UVC stream */
 		dev->discard_start_frames = 30;
-		res = uvc_start_streaming(dev->uvc_devh, &ctrl, _uvc_callback, (void *)dev, 0);
+		res = uvc_start_streaming(dev->uvc_devh, &ctrl, _hsdaoh_uvc_callback, (void *)dev, 0);
 
 		if (res < 0)
 			uvc_perror(res, "start_streaming"); /* unable to start stream */
 	}
 
-	return r;
+	return (int)res;
 }
 
 int hsdaoh_stop_stream(hsdaoh_dev_t *dev)
