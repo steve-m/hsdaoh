@@ -803,7 +803,7 @@ static void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	int frame_errors = 0;
 	unsigned int stream0_payload_bytes = 0;
 	uint16_t stream0_format = 0;
-	uint8_t *stream0_data = malloc(dev->width-1 * dev->height  * 2);
+	uint8_t *stream0_data = malloc(dev->width * dev->height * sizeof(uint16_t));
 
 	if (!stream0_data) {
 		fprintf(stderr, "Out of memory, frame skipped!\n");
