@@ -21,6 +21,7 @@
 ########################################################################
 cmake_minimum_required(VERSION 3.12.0)
 project(hsdaoh C)
+set(CMAKE_C_STANDARD 99)
 
 #select the release build type by default to get optimization flags
 if(NOT CMAKE_BUILD_TYPE)
