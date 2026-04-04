@@ -212,14 +212,14 @@ int hsdaoh_write_edid_cmd_data(hsdaoh_dev_t *dev, uint8_t *data, uint8_t len)
 	return 0;
 }
 
+/* Note: those registers and settings below have been
+ * found by try and error and observing changes to the output:
+ * no warranty! */
+
 /* Switch the MS2130 to a transparent mode, YUYV data received via HDMI
  * will be passed through unmodified */
 static void hsdaoh_ms213x_transparent_mode(hsdaoh_dev_t *dev)
 {
-	/* Note: those registers and settings have been
-	 * found by try and error and observing changes to the output:
-	 * no warranty! */
-
 	/* force YCbCr 4:2:2/YUV input, default is 0x04 (RGB) */
 	hsdaoh_ms213x_write_reg(dev, 0xf039, 0x00);
 	hsdaoh_ms213x_write_reg(dev, 0xf030, 0x02);
@@ -247,10 +247,6 @@ static void hsdaoh_ms213x_transparent_mode(hsdaoh_dev_t *dev)
  * will be passed through unmodified */
 static void hsdaoh_ms213xs_transparent_mode(hsdaoh_dev_t *dev, bool reinit)
 {
-	/* Note: those registers and settings have been
-	 * found by try and error and observing changes to the output:
-	 * no warranty! */
-
 	/* force YCbCr 4:2:2/YUV input, default is 0x04 (RGB) */
 	hsdaoh_ms213xs_write_reg(dev, 0xf130, 0x12);
 
@@ -269,6 +265,30 @@ static void hsdaoh_ms213xs_transparent_mode(hsdaoh_dev_t *dev, bool reinit)
 	/* disable chroma interpolation */
 	hsdaoh_ms213xs_write_reg(dev, 0xf618, 0x11);
 	hsdaoh_ms213xs_write_reg(dev, 0xf135, 0x0a);
+}
+
+static void hsdaoh_ms213xs_transparent_mode_rgb(hsdaoh_dev_t *dev, bool reinit)
+{
+	/* force unprocessed RGB input, default is 0x10 (processed RGB) */
+	hsdaoh_ms213xs_write_reg(dev, 0xf130, 0x11);
+	hsdaoh_ms213xs_write_reg(dev, 0xf131, 0x08);
+	hsdaoh_ms213xs_write_reg(dev, 0xf136, 0x0c);
+
+	/* disable sharpening */
+	hsdaoh_ms213xs_write_reg(dev, 0xfc80, 0x00);
+
+	/* disable luma processing -> UVC brightness/contrast control has no effect anymore */
+	hsdaoh_ms213xs_write_reg(dev, 0xfc8e, 0x11);
+
+	/* disable chroma processing -> UVC hue/saturation control has no effect anymore */
+	hsdaoh_ms213xs_write_reg(dev, 0xfc8f, 0x11);
+
+	/* disable chroma interpolation */
+	hsdaoh_ms213xs_write_reg(dev, 0xf618, 0x00);
+
+	/* enable raw RGB, low-latency mode */
+	hsdaoh_ms213xs_write_reg(dev, 0xf007, 0x08);
+	hsdaoh_ms213xs_write_reg(dev, 0xf06c, 0x07);
 }
 
 int hsdaoh_get_usb_strings(hsdaoh_dev_t *dev, char *manufact, char *product,
